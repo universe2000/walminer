@@ -396,7 +396,7 @@ static void
 flushPage(int index, char* page)
 {
 	char	storefile[MAXPGPATH] = {0};
-	char	*path = "xlogminer";
+	char	*path = PG_LOGMINER_PATH;
 	char	*filename = "soreimage";
 	FILE	*fp = NULL;
 
@@ -404,7 +404,7 @@ flushPage(int index, char* page)
 	sprintf(storefile,"%s/%s", path, filename);
 	if(!create_dir(path))
 	{
-		elog(ERROR,"fail to create dir xlogmienr under %s", DataDir);
+		elog(ERROR,"fail to create dir walminer under %s", DataDir);
 	}
 
 	fp = fopen(storefile, "rb+");

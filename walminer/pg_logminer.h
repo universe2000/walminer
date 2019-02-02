@@ -96,7 +96,7 @@
 #define PG_LOGMINER_TABLE_CONSTRAINT	"pg_constraint"
 #define PG_LOGMINER_TABLE_CLASS			"pg_class"
 
-#define	PG_LOGMINER_PATH				"xlogminer"
+#define	PG_LOGMINER_PATH				"walminer"
 #define	PG_LOGMINER_STOREIMAGE_FILENAME "soreimage"
 #define	PG_LOGMINER_TEMPRESULT_FILENAME "tempresult"
 
