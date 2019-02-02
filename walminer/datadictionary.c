@@ -2065,7 +2065,7 @@ wal_load_relmap_file(RelMapFile *map, bool shared)
 	}
 
 	/* Read data ... */
-	fd = OpenTransientFile(mapfilename, O_RDONLY | PG_BINARY);
+	fd = OpenTransientFile(mapfilename, O_RDONLY | PG_BINARY, S_IRUSR | S_IWUSR);
 	if (fd < 0)
 		ereport(FATAL,
 				(errcode_for_file_access(),
