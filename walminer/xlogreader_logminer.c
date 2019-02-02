@@ -12,10 +12,10 @@
 #include "access/xlog_internal.h"
 #include "access/xlogreader.h"
 #include "catalog/pg_control.h"
-#include "utils/elog.h"
 #include "pg_logminer.h"
+#include "logminer.h"
 #include "datadictionary.h"
-
+#include "access/xlogutils.h"
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -48,7 +48,6 @@ ResetDecoder_logminer(XLogReaderState *state)
 	}
 	state->max_block_id = -1;
 }
-
 
 /*
  * Allocate readRecordBuf to fit a record of at least the given length.
@@ -104,8 +103,8 @@ ReadPageInternal_logminer(XLogReaderState *state, XLogRecPtr pageptr, int reqLen
 
 	Assert((pageptr % XLOG_BLCKSZ) == 0);
 
-	XLByteToSeg(pageptr, targetSegNo);
-	targetPageOff = (pageptr % XLogSegSize);
+	XLByteToSeg(pageptr, targetSegNo, rrctl.WalSegSz);
+	targetPageOff = (pageptr % rrctl.WalSegSz);
 
 	/* check whether we have all the requested data already */
 	if (targetSegNo == state->readSegNo && targetPageOff == state->readOff &&
@@ -146,8 +145,8 @@ ReadPageInternal_logminer(XLogReaderState *state, XLogRecPtr pageptr, int reqLen
 			}
 			pageptr = rrctl.logprivate.startptr;
 			targetSegmentPtr = pageptr;
-			XLByteToSeg(pageptr, targetSegNo);
-			targetPageOff = (pageptr % XLogSegSize);
+			XLByteToSeg(pageptr, targetSegNo, rrctl.WalSegSz);
+			targetPageOff = (pageptr % rrctl.WalSegSz);
 			targetSegmentPtr = pageptr - targetPageOff;
 		}
 		if (!ValidXLogPageHeader_logminer(state, targetSegmentPtr, hdr))
@@ -169,8 +168,8 @@ ReadPageInternal_logminer(XLogReaderState *state, XLogRecPtr pageptr, int reqLen
 			return 0;
 		}
 		pageptr = rrctl.logprivate.startptr;
-		XLByteToSeg(pageptr, targetSegNo);
-		targetPageOff = (pageptr % XLogSegSize);
+		XLByteToSeg(pageptr, targetSegNo, rrctl.WalSegSz);
+		targetPageOff = (pageptr % rrctl.WalSegSz);
 	}
 
 	if (readLen < 0)
@@ -199,8 +198,8 @@ ReadPageInternal_logminer(XLogReaderState *state, XLogRecPtr pageptr, int reqLen
 			return 0;
 		}
 		pageptr = rrctl.logprivate.startptr;
-		XLByteToSeg(pageptr, targetSegNo);
-		targetPageOff = (pageptr % XLogSegSize);
+		XLByteToSeg(pageptr, targetSegNo, rrctl.WalSegSz);
+		targetPageOff = (pageptr % rrctl.WalSegSz);
 	}
 		if (readLen < 0)
 			goto err;
@@ -377,7 +376,6 @@ XLogReadRecord_logminer(XLogReaderState *state, XLogRecPtr RecPtr, char **errorm
 		/* XXX: more validation should be done here */
 		if (total_len < SizeOfXLogRecord)
 		{
-			ereport(NOTICE,(errmsg("It has been loaded the xlog file without the normal end.")));
 			goto err;
 		}
 		gotheader = false;
@@ -512,8 +510,8 @@ XLogReadRecord_logminer(XLogReaderState *state, XLogRecPtr RecPtr, char **errorm
 	if (record->xl_rmid == RM_XLOG_ID && record->xl_info == XLOG_SWITCH)
 	{
 		/* Pretend it extends to end of segment */
-		state->EndRecPtr += XLogSegSize - 1;
-		state->EndRecPtr -= state->EndRecPtr % XLogSegSize;
+		state->EndRecPtr += rrctl.WalSegSz - 1;
+		state->EndRecPtr -= state->EndRecPtr % rrctl.WalSegSz;
 	}
 	
 	/*If return NULL here ,it is reached the end of xlog, 
@@ -647,16 +645,16 @@ ValidXLogPageHeader_logminer(XLogReaderState *state, XLogRecPtr recptr,
 
 	Assert((recptr % XLOG_BLCKSZ) == 0);
 
-	XLByteToSeg(recptr, segno);
-	offset = recptr % XLogSegSize;
+	XLByteToSeg(recptr, segno, rrctl.WalSegSz);
+	offset = recptr % rrctl.WalSegSz;
 
-	XLogSegNoOffsetToRecPtr(segno, offset, recaddr);
+	XLogSegNoOffsetToRecPtr(segno, offset, rrctl.WalSegSz, recaddr);
 
 	if (hdr->xlp_magic != XLOG_PAGE_MAGIC)
 	{
 		char		fname[MAXFNAMELEN];
 
-		XLogFileName(fname, state->readPageTLI, segno);
+		XLogFileName(fname, state->readPageTLI, segno, rrctl.WalSegSz);
 		return false;
 	}
 
@@ -664,7 +662,7 @@ ValidXLogPageHeader_logminer(XLogReaderState *state, XLogRecPtr recptr,
 	{
 		char		fname[MAXFNAMELEN];
 
-		XLogFileName(fname, state->readPageTLI, segno);
+		XLogFileName(fname, state->readPageTLI, segno, rrctl.WalSegSz);
 		ereport(ERROR,(errmsg("invalid info bits %04X in log segment %s, offset %u",
 							  hdr->xlp_info,
 							  fname,
@@ -694,7 +692,7 @@ ValidXLogPageHeader_logminer(XLogReaderState *state, XLogRecPtr recptr,
 								  fhdrident_str, sysident_str)));
 			return false;
 		}
-		else if (longhdr->xlp_seg_size != XLogSegSize)
+		else if (longhdr->xlp_seg_size != rrctl.WalSegSz)
 		{
 			ereport(ERROR,(errmsg("WAL file is from different database system: incorrect XLOG_SEG_SIZE in page header")));
 			return false;
@@ -709,7 +707,7 @@ ValidXLogPageHeader_logminer(XLogReaderState *state, XLogRecPtr recptr,
 	{
 		char		fname[MAXFNAMELEN];
 
-		XLogFileName(fname, state->readPageTLI, segno);
+		XLogFileName(fname, state->readPageTLI, segno, rrctl.WalSegSz);
 
 		/* hmm, first page of file doesn't have a long header? */
 		ereport(ERROR,(errmsg( "invalid info bits %04X in log segment %s, offset %u",
@@ -723,14 +721,8 @@ ValidXLogPageHeader_logminer(XLogReaderState *state, XLogRecPtr recptr,
 	{
 		char		fname[MAXFNAMELEN];
 
-		XLogFileName(fname, state->readPageTLI, segno);
+		XLogFileName(fname, state->readPageTLI, segno, rrctl.WalSegSz);
 		rrctl.logprivate.endptr_reached = true;
-		/*
-		ereport(NOTICE,(errmsg("unexpected pageaddr %X/%X in log segment %s, offset %u",
-							  (uint32) (hdr->xlp_pageaddr >> 32), (uint32) hdr->xlp_pageaddr,
-							  fname,
-							  offset)));
-		*/
 		return false;
 	}
 
@@ -749,7 +741,7 @@ ValidXLogPageHeader_logminer(XLogReaderState *state, XLogRecPtr recptr,
 		{
 			char		fname[MAXFNAMELEN];
 
-			XLogFileName(fname, state->readPageTLI, segno);
+			XLogFileName(fname, state->readPageTLI, segno, rrctl.WalSegSz);
 
 			ereport(ERROR,(errmsg("out-of-sequence timeline ID %u (after %u) in log segment %s, offset %u",
 								  hdr->xlp_tli,
@@ -846,7 +838,7 @@ XLogFindFirstRecord(XLogReaderState *state, XLogRecPtr RecPtr)
 						(uint32) (RecPtr >> 32),
 						(uint32) RecPtr)));
 		
-			if (found != RecPtr && (RecPtr % XLogSegSize) != 0)
+			if (found != RecPtr && (RecPtr % rrctl.WalSegSz) != 0)
 				printf("first record is after %X/%X, at %X/%X, skipping over %u bytes\n",
 				   (uint32) (RecPtr >> 32), (uint32) RecPtr,
 				   (uint32) (found >> 32), (uint32) found,
@@ -922,9 +914,9 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 		TimeLineID	tid;
 		
 
-		startoff = recptr % XLogSegSize;
+		startoff = recptr % rrctl.WalSegSz;
 
-		if (*sendFile < 0 || !XLByteInSeg(recptr, *sendSegNo))
+		if (*sendFile < 0 || !XLByteInSeg(recptr, *sendSegNo, rrctl.WalSegSz))
 		{
 
 			/* Switch to another logfile segment */
@@ -951,9 +943,9 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 				return PG_LOGMINER_WALFILE_ERROR_NOFIND;
 			}
 
-			XLogFromFileName(temp_fname, &tid, &sendSegNo_temp);
+			XLogFromFileName(temp_fname, &tid, &sendSegNo_temp, rrctl.WalSegSz);
 			*timeline_id = tid;
-			XLogSegNoOffsetToRecPtr(sendSegNo_temp, 0, rrctl.logprivate.startptr);
+			XLogSegNoOffsetToRecPtr(sendSegNo_temp, 0, rrctl.WalSegSz, rrctl.logprivate.startptr);
 			if(!ifSerialWalfile(*sendSegNo,sendSegNo_temp) && 0 != *sendSegNo)
 			{
 				rrctl.logprivate.serialwal = false;
@@ -980,7 +972,7 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 				int			err = errno;
 				char		fname[MAXPGPATH];
 
-				XLogFileName(fname, tid, *sendSegNo);
+				XLogFileName(fname, tid, *sendSegNo, rrctl.WalSegSz);
 				ereport(ERROR,(errmsg("could not seek in log segment %s to offset %u: %s",
 							fname, startoff, strerror(err))));
 			}
@@ -988,8 +980,8 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 		}
 
 		/* How many bytes are within this segment? */
-		if (nbytes > (XLogSegSize - startoff))
-			segbytes = XLogSegSize - startoff;
+		if (nbytes > (rrctl.WalSegSz - startoff))
+			segbytes = rrctl.WalSegSz - startoff;
 		else
 			segbytes = nbytes;
 
@@ -998,7 +990,7 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 		{
 			char		fname[MAXPGPATH];
 			int 		err = errno;
-			XLogFileName(fname, tid, *sendSegNo);
+			XLogFileName(fname, tid, *sendSegNo, rrctl.WalSegSz);
 			ereport(ERROR,(errmsg("could not read from log segment %s, offset %d, length %d: %s",
 						fname, *sendOff, segbytes, strerror(err))));
 		}

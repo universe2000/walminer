@@ -1,169 +1,163 @@
-XLogMiner
+WalMiner
 =====
-an Open-Source SQL miner on PostgreSQL WAL log
 
-# What is XLogMiner
-XLogMiner is used for parsing the SQL statement out from the PostgreSQL WAL (write ahead logs) logs, and it can also generate the corresponding "undo SQL".
+# 什么是WalMiner
+WalMiner是从PostgreSQL的WAL(write ahead logs)日志中解析出执行的SQL语句的工具，并能生成出对应的undo SQL语句。
 
-# Configuration requirements
-You need configure the WAL level to "logical", and setup the table to "full" mode. For example, the blow statement is setting the table "t1" to "full" mode.
+# 配置要求
+## 需要将数据库日志级别配置需要大于minimal
 
-```sql
-alter table t1 replica identity FULL;
-```
+## PG版本支持
+PG9.5.0之前的版本没有做过测试
+PG9.5.0~PG10.X版本使用WalMiner_10_X
+PG11之后的版本使用WalMiner_11_X
+如果使用过程中发现问题欢迎向我们反馈。
 
-# Supported PostgreSQL versions
-The project was developed based on PostgreSQL 9.4.x, with only basic verification on PostgreSQL 9.6.
-Please let us know if you find any issues during your use.
-
-# Compile and install
-1. Copy the xlogminer directory into the "../contrib/" directory of the PostgreSQL source code location
-2. Enter "contrib/xlogminer" directory
-3. Execute commands
+# 编译安装
+1. 将walminer目录放置到编译通过的PG工程的"../contrib/"目录下
+2. 进入walminer目录
+3. 执行命令
 ```shell
 make && make install
 ```
 
-# User Guide
-## Scenario I: Execute the parsing in the owner database of the WAL files
-### 1. Create extension xlogminer
+# 使用方法
+## 场景一：从WAL日志产生的数据库中直接执行解析
+### 1. 创建walminer的extension
+	create extension walminer;
+
+### 2. Add wal日志文件
 ```sql
-create extension xlogminer;
+-- 增加wal文件：
+select walminer_wal_add('/opt/test/wal');
+-- 注：参数可以为目录或者文件
 ```
 
-### 2. Add target WAL files
+### 3. Remove wal日志文件
 ```sql
--- Add WAL file or directory
-select xlogminer_xlogfile_add('/opt/test/wal');
--- Note: the parameter can be file name or directory name.
+-- 移除wal文件：
+select walminer_wal_remove('/opt/test/wal');
+-- 注：参数可以为目录或者文件
 ```
 
-### 3. Remove WAL files
+### 4. List wal日志文件
 ```sql
--- remove WAL file or directory
-select xlogminer_xlogfile_remove('/opt/test/wal');
--- Note: the parameter can be file name or directory name.
+-- 列出wal文件：
+select walminer_wal_list();
 ```
 
-### 4. List WAL files
+### 5. 执行解析
 ```sql
--- List WAL files
-select xlogminer_xlogfile_list();
+select walminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’)
+---如果分析全部日志：
+select walminer_start('null','null',0,0);
+---将系统表修改结果输出到$PGDATA/walminer/temp下：
+select walminer_start('null','null',0,0,true);
 ```
 
-### 5. Execute the xlogminer
-```sql
-select xlogminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’);
--- Run below sql to parse all the WAL logs
-select xlogminer_start('null','null',0,0);
-```
-* **START_TIMESTAMP**：Specify the start time condition of the records in the return results, the xlogminer will start parsing from this time value. If this value is NULL, the earlist records will be displayed from the WAL lists. If this time value is not included in the xlog lists, a.k.a all the records are ealier then this value, the NULL will be returned.
-* **STOP_TIMESTAMP**：Specify the ending time condition of the records in the results, the xlogminer will stop parsing when the result is later than this time. If this parameter is NULL, then all the records after **START_TIMESTAMP** will parsed and displyed in the WAL logs.
-* **START_XID**：Similiar with **START_TIMESTAMP**, specify the starting **XID** value
-* **STOP_XID**：Similiar with **STOP_TIMESTAMP**，specify the ending **XID** value	
+* **START_TIMESTAMP**：指定输出结果中最早的记录条目，即从该时间开始输出分析数据；若该参数值为空，则以分析日志列表中最早数据开始输出；若该参数值指定时间没有包含在所分析xlog列表中，即通过分析发现全部早于该参数指定时间，则返回空值。	
+* **STOP_TIMESTAMP**：指定数据结果中最晚的记录条目，即输出结果如果大于该时间，则停止分析，不需要继续输出；如果该参数值为空，则从**START_TIMESTAMP**开始的所有日志都进行分析和输出。	
+* **START_XID**：作用与**START_TIMESTAMP**相同，指定开始的**XID**值；	
+* **STOP_XID**：作用与**STOP_TIMESTAMP**相同，指定结束的**XID**值	
 
-:warning: **Only one of these two group parameters can be provided, or error will be retured**
-	
-### 6. Check the parsing result
+:warning: **两组参数只能有一组为有效输入，否则报错。**
+
+
+
+### 6. 解析结果查看
 ```sql
-select * from xlogminer_contents;
+select * from walminer_contents;
 ```
 
-### 7. Stop the xlogminer
-This function is used to free the memory and stop the WAL parsing. No parameters available.
+### 7. 结束walminer操作
+该函数作用为释放内存，结束日志分析，该函数没有参数。
 ```sql
-select xlogminer_stop();
+select walminer_stop();
 ```
 
 
-## Scenario II: Parsing the WAL logs from the database which is not the owner of these WAL logs
-:warning: The target PostgreSQL database and the source database must have the same version
+## 场景二：从非WAL产生的数据库中执行WAL日志解析
+:warning: 要求执行解析的PostgreSQL数据库和被解析的为同一版本
 
-### On production database
+### 于生产数据库
 
-#### 1. Create xlogminer extension
+#### 1.创建walminer的extension
 ```sql
-create extension xlogminer;
-```
-	
-#### 2. Build the dictionary
-```sql
-select xlogminer_build_dictionary('/opt/proc/store_dictionary');
--- Note: the parameter can be file name or directory name.
-```
-
-### On testing database
-
-#### 1. Create xlogminer extension
-```sql
-create extension xlogminer;
-```
-
-#### 2. Load database dictionary
-```sql
-select xlogminer_load_dictionary('/opt/test/store_dictionary');
--- Note: the parameter can be file name or directory name.
-```
-:bulb:	the parameter can be file name or directory name.
-	
-#### 3. Add WAL files
-```sql
--- Add WAL files
-select xlogminer_xlogfile_add('/opt/test/wal');
--- Note: the parameter can be file name or directory name.
-```
-
-#### 4. remove xlog WAL files
-```sql
--- Remove WAL files
-select xlogminer_xlogfile_remove('/opt/test/wal');
--- Note:the parameter can be file name or directory name.
-```
-
-#### 5. List xlog WAL files	
-```sql
--- list WAL files
-select xlogminer_xlogfile_list();
--- Note:the parameter can be file name or directory name.
+create extension walminer;
 ```
 	
-#### 6. Execute the parsing
+#### 2.生成数据字典
 ```sql
-select xlogminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’)
+select walminer_build_dictionary('/opt/proc/store_dictionary');
+-- 注：参数可以为目录或者文件
 ```
 
-* **START_TIMESTAMP**：Specify the start time condition of the records in the return results, the xlogminer will start parsing from this time value. If this value is NULL, the earlist records will be displayed from the WAL lists. If this time value is not included in the xlog lists, a.k.a all the records are ealier then this value, the NULL will be returned.
-* **STOP_TIMESTAMP**：Specify the ending time condition of the records in the results, the xlogminer will stop parsing when the result is later than this time. If this parameter is NULL, then all the records after **START_TIMESTAMP** will parsed and displyed in the WAL logs.
-* **START_XID**：Similiar with **START_TIMESTAMP**, specify the starting **XID** value
-* **STOP_XID**：Similiar with **STOP_TIMESTAMP**，specify the ending **XID** value	
 
-#### 7. Check the parsing result
+### 于测试数据库
+
+#### 1. 创建walminer的extension
 ```sql
-select * from xlogminer_contents;
+create extension walminer;
 ```
 
-### 8.Stop the xlogminer
-This function is used to free the memory and stop the WAL parsing. No parameters available.
+#### 2. load数据字典
 ```sql
-select xlogminer_stop();
+select walminer_load_dictionary('/opt/test/store_dictionary');
+-- 注：参数可以为目录或者文件
+```
+	
+#### 3. add wal日志文件
+```sql
+-- 增加wal文件：
+select walminer_wal_add('/opt/test/wal');
+-- 注：参数可以为目录或者文件
 ```
 
-:warning: **NOTE**：For the security considerations, xlogminer_contents is a temporary table generated by xlogminer automatically, it is not visible when session disconnected and then re-connect, and it is also not visible to other sessions. 
-     If you want to keep the paring result, you can use the below SQL to write the results into a regular table.
-```sql	 
-create xxx as select * from  xlogminer_contents;
+#### 4. remove wal日志文件
+```sql
+-- 移除wal文件：
+select walminer_wal_remove('/opt/test/wal');
+-- 注：参数可以为目录或者文件
+```
+#### 5. list wal日志文件	
+```sql
+-- 列出wal文件：
+select walminer_wal_list();
+-- 注：参数可以为目录或者文件
 ```
 
-# Limitations
-1. Only DML statements will be parsed in this version, DDL statement not supported.
-2. The DML statemes would **NOT** be parsed out when the below DDL related operations were executed:
-   Deleting/Truncating table, table space modification and column type modification etcs.
-3. The parsing result is depending on the latest database dictionary. For example, after user1 created table t1, the table owner was modified to user2, then all the parsing results related to table t1 will be marked with user2.
-4. If WAL logs are missed in a time stage, the SQL statements executed in that time stage would **NOT** be parsed out.
-5. The "ctid" attribute is the value of the change "at that time". If there are "ctid" changes due to vacuum or other operations, this value will be **inaccurate**. We need use this value to determine the corresponding undo tuples when the rows of data are duplicate, it does not mean that you can execute such undo statements directly.
-6. If the table is not set to full mode, then the "update" and "delete" statement will not be resolved. (Of course, this affects the use of this software, the next version will make improvements to this problem）
-7. If the database log level is not set to **logical**, there will be unpredictable lost of the SQL statements
-8. If the DDL statement "drop" was executed, all related column value will be decoded as "encode('AD976BC56F',hex)" before this DDL execution.
+	
+#### 6. 执行解析
+```sql
+select walminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’)
+```
+* **START_TIMESTAMP**：指定输出结果中最早的记录条目，即从该时间开始输出分析数据；若该参数值为空，则以分析日志列表中最早数据开始输出；若该参数值指定时间没有包含在所分析xlog列表中，即通过分析发现全部早于该参数指定时间，则返回空值。	
+* **STOP_TIMESTAMP**：指定数据结果中最晚的记录条目，即输出结果如果大于该时间，则停止分析，不需要继续输出；如果该参数值为空，则从START_TIMESTAMP开始的所有日志都进行分析和输出。	
+* **START_XID**：作用与START_TIMESTAMP相同，指定开始的XID值；	
+* **STOP_XID**：作用与STOP_TIMESTAMP相同，指定结束的XID值	
+	两组参数只能有一组为有效输入，否则报错。	
 
-# Contact us
-Please contact us with opensource@highgo.com if you have any comments or find any bugs, thanks!
+#### 7. 解析结果查看
+```sql
+select * from walminer_contents;
+```
+
+### 8.结束walminer操作,该函数作用为释放内存，结束日志分析，该函数没有参数。
+```sql
+select walminer_stop();
+```
+
+:warning: **注意**：walminer_contents是xlogminer自动生成的临时表，因此当session断开再重新进入或其他session中解析数据不可见。这么做主要是基于安全考虑。
+      如果希望保留解析结果，可利用create xxx as select * from  xlogminer_contents;写入普通表中。
+
+# 使用限制
+1. 本版本只解析DML语句，不处理DDL语句
+2. 执行了删除表、truncate表、更改表的表空间、更改表字段的类型、vacuum full，这样的DDL语句后，发生DDL语句之前的此表相关的DML语句不会再被解析。
+3. 解析结果依赖于数据字典。（举例：创建表t1,所有者为user1，但是中间将所有者改为user2。那解析结果中，所有t1相关操作所有者都将标示为user2）
+4. wal日志如果发生缺失，在缺失的wal日志中发生提交的数据，都不会在解析结果中出现
+5. 解析结果中undo字段的ctid属性是发生变更“当时”的值，如果因为vacuum等操作导致ctid发生变更，这个值将不准确。对于有可能存在重复行的数据，我们需要通过这个值确定undo对应的tuple条数，不代表可以直接执行该undo语句。
+6. 执行了表字段drop的DDL语句后,发生DDL语句之前的这个字段相关的值都会被解析为encode（'AD976BC56F'，hex）的形式，另外自定义类型也会解析为这种形式
+7. 只能解析与数据字典时间线一致的wal文件
+
+# 联系我们
+发现bug或者有好的建议可以通过邮箱（opensource@highgo.com）联系我们。
