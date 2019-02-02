@@ -597,7 +597,7 @@ checkLogminerUser(void)
 	bool	result = false;	
 	result = superuser();
 	if(!result)
-		ereport(ERROR,(errmsg("Only the superuser execute xlogminer.")));
+		ereport(ERROR,(errmsg("Only the superuser execute walminer.")));
 	return result;
 }
 
