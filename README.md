@@ -5,13 +5,13 @@ WalMiner
 WalMiner是从PostgreSQL的WAL(write ahead logs)日志中解析出执行的SQL语句的工具，并能生成出对应的undo SQL语句。
 
 # 配置要求
-## 需要将数据库日志级别配置需要大于minimal
+需要将数据库日志级别配置需要大于minimal
 
 ## PG版本支持
-PG9.5.0之前的版本没有做过测试
-PG9.5.0~PG10.X版本使用WalMiner_10_X
-PG11之后的版本使用WalMiner_11_X
-如果使用过程中发现问题欢迎向我们反馈。
+- PG9.5.0之前的版本没有做过测试
+- PG9.5.0~PG10.X版本使用WalMiner_10_X
+- PG11之后的版本使用WalMiner_11_X
+- 如果使用过程中发现问题欢迎向我们反馈。
 
 # 编译安装
 1. 将walminer目录放置到编译通过的PG工程的"../contrib/"目录下
