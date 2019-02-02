@@ -1,5 +1,5 @@
-# xlogminer extension
+# walminer extension
 comment = 'inspect the contents of database pages at a low level'
 default_version = '1.0'
-module_pathname = '$libdir/xlogminer'
+module_pathname = '$libdir/walminer'
 relocatable = true

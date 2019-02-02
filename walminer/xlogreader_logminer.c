@@ -12,10 +12,10 @@
 #include "access/xlog_internal.h"
 #include "access/xlogreader.h"
 #include "catalog/pg_control.h"
-#include "utils/elog.h"
 #include "pg_logminer.h"
+#include "logminer.h"
 #include "datadictionary.h"
-
+#include "access/xlogutils.h"
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -48,7 +48,6 @@ ResetDecoder_logminer(XLogReaderState *state)
 	}
 	state->max_block_id = -1;
 }
-
 
 /*
  * Allocate readRecordBuf to fit a record of at least the given length.
@@ -377,7 +376,6 @@ XLogReadRecord_logminer(XLogReaderState *state, XLogRecPtr RecPtr, char **errorm
 		/* XXX: more validation should be done here */
 		if (total_len < SizeOfXLogRecord)
 		{
-			ereport(NOTICE,(errmsg("It has been loaded the xlog file without the normal end.")));
 			goto err;
 		}
 		gotheader = false;
@@ -725,12 +723,6 @@ ValidXLogPageHeader_logminer(XLogReaderState *state, XLogRecPtr recptr,
 
 		XLogFileName(fname, state->readPageTLI, segno);
 		rrctl.logprivate.endptr_reached = true;
-		/*
-		ereport(NOTICE,(errmsg("unexpected pageaddr %X/%X in log segment %s, offset %u",
-							  (uint32) (hdr->xlp_pageaddr >> 32), (uint32) hdr->xlp_pageaddr,
-							  fname,
-							  offset)));
-		*/
 		return false;
 	}
 
