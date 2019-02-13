@@ -160,4 +160,4 @@ select walminer_stop();
 7. 只能解析与数据字典时间线一致的wal文件
 
 # 联系我们
-发现bug或者有好的建议可以通过邮箱（opensource@highgo.com）联系我们。
+发现bug或者有好的建议可以通过邮箱（lchch1990@sina.cn）联系我。
