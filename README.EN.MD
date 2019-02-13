@@ -54,6 +54,8 @@ select xlogminer_xlogfile_list();
 select xlogminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’);
 -- Run below sql to parse all the WAL logs
 select xlogminer_start('null','null',0,0);
+-- Run below will analyse the system table record and store in '$PGDATA/walminer/temp'
+select xlogminer_start('null','null',0,0,true);
 ```
 * **START_TIMESTAMP**：Specify the start time condition of the records in the return results, the xlogminer will start parsing from this time value. If this value is NULL, the earlist records will be displayed from the WAL lists. If this time value is not included in the xlog lists, a.k.a all the records are ealier then this value, the NULL will be returned.
 * **STOP_TIMESTAMP**：Specify the ending time condition of the records in the results, the xlogminer will stop parsing when the result is later than this time. If this parameter is NULL, then all the records after **START_TIMESTAMP** will parsed and displyed in the WAL logs.
