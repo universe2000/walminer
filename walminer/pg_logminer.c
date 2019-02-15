@@ -2293,7 +2293,7 @@ xlogminer_xlogfile_list(PG_FUNCTION_ARGS)
 	FuncCallContext *funcctx = NULL;
 	logminer_fctx	*temp_fctx = NULL;
 
-	elog(ERROR,"this function is does not support on pg11 now.");
+	//elog(ERROR,"this function is does not support on pg11 now.");
 	if (SRF_IS_FIRSTCALL())
 	{
 		logminer_fctx	*fctx = NULL;
@@ -2304,11 +2304,13 @@ xlogminer_xlogfile_list(PG_FUNCTION_ARGS)
 		loadXlogfileList();
 		if(!is_xlogfilelist_exist())
 			ereport(ERROR,(errmsg("Xlogfilelist has not been loaded or has been removed.")));
+		
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 		fctx = (logminer_fctx *)logminer_palloc(sizeof(logminer_fctx),0);
 		fctx->hasnextxlogfile= true;
-		funcctx = SRF_FIRSTCALL_INIT();
 		funcctx->user_fctx = fctx;
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+		
 		tupdesc = makeOutputXlogDesc();
 		funcctx->attinmeta = TupleDescGetAttInMetadata(tupdesc);
 		MemoryContextSwitchTo(oldcontext);
