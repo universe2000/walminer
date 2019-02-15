@@ -2292,6 +2292,8 @@ xlogminer_xlogfile_list(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx = NULL;
 	logminer_fctx	*temp_fctx = NULL;
+
+	elog(ERROR,"this function is does not support on pg11 now.");
 	if (SRF_IS_FIRSTCALL())
 	{
 		logminer_fctx	*fctx = NULL;

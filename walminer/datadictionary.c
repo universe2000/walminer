@@ -485,6 +485,8 @@ checkXlogFileRepeat(char *path,XlogFile **xfrepeat)
 	xfl = (XlogFileList)XlogfileListCache;
 	if(!xfl)
 		return PG_LOGMINER_XLOGFILE_REPEAT_CHECK_DIFFERENT;
+
+	getWalSegSz(path);
 	
 	split_path_fname(path,&filedir,&filename);
 	XLogFromFileName(filename, &timelinecheck, &segnocheck, rrctl.WalSegSz);
@@ -871,6 +873,7 @@ getXlogFilesegno(XlogFile *xf)
 	
 	
 	split_path_fname(xf->filepath, &directory, &fname);
+	getWalSegSz(xf->filepath);
 	XLogFromFileName(fname, &timeline, &segno, rrctl.WalSegSz);
 	if(fname)
 		logminer_pfree(fname,0);
@@ -1597,7 +1600,7 @@ getNextXlogFile(char *fctx, bool show)
 	
 	xf = (XlogFile*)lfctx->xlogfileptr;
 	result = xf->filepath;
-
+	getWalSegSz(result);
 	if(xf->next)
 	{
 		lfctx->xlogfileptr = (char *)xf->next;
@@ -1610,7 +1613,6 @@ getNextXlogFile(char *fctx, bool show)
 
 	if(maxtl != timeline && !show)
 		result = getNextXlogFile(fctx, show);
-	getWalSegSz(result);
 	return result;
 }
 
