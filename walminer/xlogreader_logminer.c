@@ -949,7 +949,8 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 			if(!ifSerialWalfile(*sendSegNo,sendSegNo_temp) && 0 != *sendSegNo)
 			{
 				rrctl.logprivate.serialwal = false;
-				rrctl.logprivate.changewal= true;
+				ereport(NOTICE,(errmsg("can not analyse non-serial wal segment and stop before \"%s\"", xlogfilename)));
+				return PG_LOGMINER_WALFILE_NOTSERIAL;
 			}
 			else
 				rrctl.logprivate.serialwal = true;
@@ -1019,7 +1020,7 @@ XLogMinerReadPage(XLogReaderState *state, XLogRecPtr targetPagePtr, int reqLen,
 	statu = XLogMinerXLogRead(NULL, &private->timeline, targetPagePtr,
 					 readBuff, count);
 	*curFileTLI = private->timeline;
-	if(PG_LOGMINER_WALFILE_ERROR_NOFIND == statu || PG_LOGMINER_WALFILE_ENDALL == statu)
+	if(PG_LOGMINER_WALFILE_ERROR_NOFIND == statu || PG_LOGMINER_WALFILE_ENDALL == statu || PG_LOGMINER_WALFILE_NOTSERIAL == statu)
 		count = PG_LOGMINER_WALFILE_ERROR_COUNT;
 	return count;
 }

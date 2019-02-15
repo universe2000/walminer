@@ -51,6 +51,7 @@
 
 #define	PG_LOGMINER_WALFILE_ERROR_NOFIND	-1	/*did not find the wal file*/
 #define	PG_LOGMINER_WALFILE_ENDALL	-2	/*arrive at num that user refer to*/
+#define	PG_LOGMINER_WALFILE_NOTSERIAL	-3	/*serial wal only*/
 #define	PG_LOGMINER_WALFILE_ERROR_COUNT		-10
 
 
