@@ -101,6 +101,8 @@
 #define	PG_LOGMINER_STOREIMAGE_FILENAME "soreimage"
 #define	PG_LOGMINER_TEMPRESULT_FILENAME "tempresult"
 
+#define	PG_DEBUG_STRINFO_SIZE			1000
+
 
 
 typedef struct SystemClass{
@@ -356,6 +358,7 @@ typedef struct SQLRecycleCtl
 
 	/*for mutiinsert*/
 	bool			mutinsert;
+	bool			isinit;
 	int				sqlindex;
 	char			*multdata;
 	/*For store sqls in a xact*/
@@ -374,7 +377,8 @@ typedef struct XlogResult{
 extern RecordRecycleCtl rrctl;
 extern SQLRecycleCtl	srctl;
 extern uint32	sqlnoser;
-
+extern bool				log_mod;
+extern bool				debug_mode;
 
 void appendtoSQL(XLogMinerSQL *sql_simple, char *sqlpara , int spaceKind);
 
@@ -395,7 +399,6 @@ void deleteCharFromSQL(XLogMinerSQL *sql_simple);
 void wipeSQLFromstr(XLogMinerSQL *sql_simple,char *fromstr,char *checkstr);
 void appendBlanktoSQL(XLogMinerSQL *sql_simple);
 void getWalSegSz(char* path);
-
-
+void outTempleResult(char *str);
 
 #endif
