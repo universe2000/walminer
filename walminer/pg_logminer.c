@@ -42,6 +42,10 @@ uint32				sqlnoser;
 FILE				*tempFileOpen = NULL;
 bool				tempresultout = false;
 
+char				globleStrInfo[PG_DEBUG_STRINFO_SIZE] = {0};
+bool				debug_mode = false;
+bool				log_mod = false;
+
 
 static SystemClass sysclass[PG_LOGMINER_SYSCLASS_MAX];
 static int sysclassNum = 0;
@@ -105,9 +109,6 @@ static void heap_page_prune_execute_logminer(Page page,
 						OffsetNumber *nowdead, int ndead,
 						OffsetNumber *nowunused, int nunused);
 static void closeTempleResult(void);
-static void outTempleResult(char *str);
-
-
 
 
 /*
@@ -127,7 +128,7 @@ SysClassLevel *getImportantSysClass(void)
 	return ImportantSysClass;
 }
 
-static void 
+void 
 outTempleResult(char *str)
 {
 
@@ -385,10 +386,25 @@ getImageFromStore(RelFileNode *rnode, ForkNumber forknum, BlockNumber blkno, cha
 	}
 
 	if(!imagesTar)
+	{
+		if(debug_mode)
+		{
+			memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+			sprintf(globleStrInfo, "[getImageFromStore]page:relnode %u, blckno %d NOT FOUND", rnode->relNode, blkno);
+			outTempleResult(globleStrInfo);
+		}
+
 		return false;
+	}
 
 	readPage(loop, page);
 	*index = loop;
+	if(debug_mode)
+	{
+		memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+		sprintf(globleStrInfo, "[getImageFromStore]page:relnode %u, blckno %d,index %d", rnode->relNode, blkno, *index);
+		outTempleResult(globleStrInfo);
+	}
 	return true;
 }
 
@@ -544,6 +560,12 @@ appendImage(ImageStore *image, char* page)
 		}
 	}
 	flushPage(loop, page);
+	if(tempresultout)
+	{
+		memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+		sprintf(globleStrInfo, "[appendimage] relfileoid=%u,blkno=%d,index %d\n", image->rnode.relNode, image->blkno, loop);
+		outTempleResult(globleStrInfo);
+	}
 	rrctl.imagelist = lappend(rrctl.imagelist, image);
 }
 
@@ -559,6 +581,12 @@ pageInitInXlog(RelFileNode *rnode, ForkNumber forknum, BlockNumber blkno)
 	image->rnode.dbNode = rnode->dbNode;
 	image->rnode.relNode = rnode->relNode;
 	image->rnode.spcNode = rnode->spcNode;
+	if(debug_mode)
+	{
+		memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+		sprintf(globleStrInfo, "[pageInitInXlog]initpage:relnode %u, blckno %d",rnode->relNode, blkno);
+		outTempleResult(globleStrInfo);
+	}
 
 	image->forknum = forknum;
 	image->blkno = blkno;
@@ -769,16 +797,16 @@ getTupleFromImage_update(XLogReaderState *record, Page page ,Size *len, bool new
 	if (!XLogRecHasBlockImage(record, block_id))
 	{
 		int index = 0;
-	//outTempleResult("getTupleFromImage_update 1");
 		/*occur when XLH_UPDATE_PREFIX_FROM_OLD or XLH_UPDATE_SUFFIX_FROM_OLD*/
 		
 		if(!getImageFromStore(&rnode, forknum, blkno, (char*)page, &index))
 				return NULL;
 	}
 	else
-	{//outTempleResult("getTupleFromImage_update 2");
+	{
 		getBlockImage(record, block_id, page);
 	}
+
 
 	if(new)
 	{
@@ -818,11 +846,20 @@ getTupleFromImage_mutiinsert(XLogReaderState *record, Page page ,Size *len, Offs
 	{
 		int index = 0;
 		if(!getImageFromStore(&rnode, forknum, blkno, (char*)page, &index))
+		{
 			return NULL;
+		}
+		if(debug_mode)
+		{
+			memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+			sprintf(globleStrInfo, "[getTupleFromImage_mutiinsert]page:relnode %u, blckno %d,block_id %d,index%d", rnode.relNode, blkno,block_id,index);
+			outTempleResult(globleStrInfo);
+		}
 	}
 	else
+	{
 		getBlockImage(record, block_id, page);
-	
+	}
 
 	id = PageGetItemId(page, offnum);
 	tuphdr = (HeapTupleHeader)PageGetItem(page, id);
@@ -887,7 +924,7 @@ getTupleData_Insert(XLogReaderState *record, char** tuple_info, Oid reloid)
 	{
 		int index = 0;
 
-		if(XLOG_HEAP_INIT_PAGE == XLogRecGetInfo(record))
+		if(XLOG_HEAP_INIT_PAGE & XLogRecGetInfo(record))
 		{
 			pageInitInXlog(&target_node, MAIN_FORKNUM, blkno);
 		}
@@ -910,8 +947,14 @@ getTupleData_Insert(XLogReaderState *record, char** tuple_info, Oid reloid)
 			HeapTupleHeaderSetXmin(htup, XLogRecGetXid(record));
 			HeapTupleHeaderSetCmin(htup, FirstCommandId);
 			newlen += SizeofHeapTupleHeader;
+			if(debug_mode)
+			{
+				memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+				sprintf(globleStrInfo, "[getTupleData_Insert]PageAddItem:offsetnum %d,relnode %u, blckno %d",xlrec->offnum, target_node.relNode, blkno);
+				outTempleResult(globleStrInfo);
+			}
 			if(InvalidOffsetNumber == PageAddItem(page, (Item) htup, newlen, xlrec->offnum, true, true))
-				elog(PANIC, "failed to add tuple");
+				elog(ERROR, "failed to add tuple:offsetnum %d,relnode %u, blckno %d", xlrec->offnum, target_node.relNode, blkno);
 			flushPage(index, page);
 		}while(false);
 	}
@@ -1030,13 +1073,14 @@ getTupleData_Delete(XLogReaderState *record, char** tuple_info, Oid reloid)
 		else
 			tuplem = rrctl.tuplem;
 		memcpy((char *) tuplem, htup, newlen);
-		htup = (HeapTupleHeader)tuplem;
+		htup = (HeapTupleHeader) tuplem;
+		
 		if(rrctl.tupdesc)
 		{
 			freetupdesc(rrctl.tupdesc);
 			rrctl.tupdesc = NULL;
 		}
-			
+
 		rrctl.tupdesc = GetDescrByreloid(reloid);
 		tupdesc = rrctl.tupdesc;
 	}while(false);
@@ -1123,13 +1167,15 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 	ItemPointerSet(&target_tid, newblk, xlrec->new_offnum);
 	ItemPointerSet(&target_tid_old, oldblk, xlrec->old_offnum);
 	rrctl.reloid = reloid;
+//log_printf_str1("newoffnum=");log_printf_long(xlrec->new_offnum);
+//log_printf_str1("oldoffnum=");log_printf_long(xlrec->old_offnum);
+
 	do
 	{
 
 		if(XLogRecHasBlockImage(record, 0))
 		{
-	//outTempleResult("getTupleData_Update 1");
-
+//log_printf_str("getTupleData_Update 1");
 			recdata = getTupleFromImage_update(record, page, &datalen, true);
 			if(!recdata)
 				elog(ERROR,"get data form image failed about reloid=%u,blckno=%u", target_node.relNode, newblk);
@@ -1147,23 +1193,25 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			rrctl.tupdesc = GetDescrByreloid(reloid);
 			tupdesc = rrctl.tupdesc;
 		}
-		else if(xlrec->flags & XLH_UPDATE_CONTAINS_NEW_TUPLE || xlrec->flags & XLH_UPDATE_PREFIX_FROM_OLD || XLH_UPDATE_SUFFIX_FROM_OLD)
+		else
 		{
 			uint16		prefixlen = 0, suffixlen = 0;
 			Size		oldlen = 0;
 			char		page_old[BLCKSZ] = {0};
-	//outTempleResult("getTupleData_Update 2");			
-			if(XLOG_HEAP_INIT_PAGE == XLogRecGetInfo(record))
-			{//outTempleResult("getTupleData_Update 3");
+			
+			if(XLOG_HEAP_INIT_PAGE & XLogRecGetInfo(record))
+			{
 				pageInitInXlog(&target_node, MAIN_FORKNUM, newblk);
 			}
 			if(!getImageFromStore(&target_node, MAIN_FORKNUM, newblk, (char*)page, &indexnew))
-			{//outTempleResult("getTupleData_Update 4");
+			{
 				break;
 			}
-			
-			htup_old = (HeapTupleHeader)getTupleFromImage_update(record, (Page)page_old, &oldlen, false);
-			
+
+			if((xlrec->flags & XLH_UPDATE_PREFIX_FROM_OLD) || (xlrec->flags & XLH_UPDATE_SUFFIX_FROM_OLD))
+			{
+				htup_old = (HeapTupleHeader)getTupleFromImage_update(record, (Page)page_old, &oldlen, false);
+			}
 			recdata = XLogRecGetBlockData(record, 0, &datalen);
 			recdata_end = recdata + datalen;
 
@@ -1183,10 +1231,16 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			recdata += SizeOfHeapHeader;
 
 			tuplen = recdata_end - recdata;
+//log_printf_str1("datalen=");log_printf_long(datalen);
+//log_printf_str1("prefixlen=");log_printf_long(prefixlen);
+//log_printf_str1("suffixlen=");log_printf_long(suffixlen);
+//log_printf_str1("tuplen=");log_printf_long(tuplen);
+
 			Assert(tuplen <= MaxHeapTupleSize);
 
 			tuplem = rrctl.tuplem;
 			htup = (HeapTupleHeader)tuplem;
+			memset(htup, 0, SizeofHeapTupleHeader);
 
 			newp = (char *) htup + SizeofHeapTupleHeader;
 
@@ -1202,7 +1256,10 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 				newp += len;
 
 				/* copy prefix from old tuple */
-				memcpy(newp, (char *) htup_old + htup_old->t_hoff, prefixlen);
+				if(htup_old)
+					memcpy(newp, (char *) htup_old + htup_old->t_hoff, prefixlen);
+				else
+					memset(newp, 0, prefixlen);
 				newp += prefixlen;
 
 				/* copy new tuple data from WAL record */
@@ -1225,7 +1282,12 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 
 			/* copy suffix from old tuple */
 			if (suffixlen > 0)
-				memcpy(newp, (char *) htup_old + oldlen - suffixlen, suffixlen);
+			{
+				if(htup_old)
+					memcpy(newp, (char *) htup_old + oldlen - suffixlen, suffixlen);
+				else
+					memset(newp, 0, suffixlen);
+			}
 
 			htup->t_infomask2 = xlhdr->t_infomask2;
 			htup->t_infomask = xlhdr->t_infomask;
@@ -1237,10 +1299,21 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			htup->t_ctid = target_tid;
 			newlen = SizeofHeapTupleHeader + tuplen + prefixlen + suffixlen;
 
+			if(debug_mode)
+			{
+				memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+				sprintf(globleStrInfo, "[getTupleData_Update]PageAddItem:offsetnum %d,relnode %u, blckno %d",xlrec->new_offnum, target_node.relNode, newblk);
+				outTempleResult(globleStrInfo);
+			}
 			if (InvalidOffsetNumber == PageAddItem(page, (Item) htup, newlen, xlrec->new_offnum, true, true))
-				elog(PANIC, "failed to add tuple");
-			flushPage(indexnew, page);
+				elog(ERROR, "failed to add tuple:offsetnum %d,relnode %u, blckno %d", xlrec->new_offnum, target_node.relNode, newblk);
 
+			flushPage(indexnew, page);
+			/*If we does not find old tuple, then should not exe mentalTup*/
+			if((prefixlen > 0 || suffixlen > 0) && !htup_old)
+			{
+				htup = NULL;
+			}
 			if(rrctl.tupdesc)
 			{
 				freetupdesc(rrctl.tupdesc);
@@ -1249,10 +1322,9 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			rrctl.tupdesc = GetDescrByreloid(reloid);
 			tupdesc = rrctl.tupdesc;
 		}
-		else
-			elog(PANIC, "Wrong update tuple");
 	}while(false);
-
+	
+	htup_old = NULL;
 	do
 	{
 		if(oldblk == newblk)
@@ -1267,8 +1339,10 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 		{
 			break;
 		}
+
 		lp = PageGetItemId(page, xlrec->old_offnum);
 		datalen = lp->lp_len;
+		
 		htup_old = (HeapTupleHeader) PageGetItem(page, lp);
 		if (!oldimage)
 		{
@@ -1289,6 +1363,7 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			
 			flushPage(indexold, page);
 		}
+
 		if(datalen + SizeOfHeapUpdate > MaxHeapTupleSize)
 		{
 			rrctl.tuplem_bigold = getTuplemSpace(datalen + SizeOfHeapUpdate + SizeofHeapTupleHeader);
@@ -1302,21 +1377,29 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 		htup_old = (HeapTupleHeader)tuplem_old;
 	}while(false);
 
-	if(NULL != htup)
+	if(NULL != htup_old)
 	{
 		rrctl.sqlkind = PG_LOGMINER_SQLKIND_UPDATE;
+
 		tupledata.t_data = htup_old;
 		mentalTup(&tupledata, tupdesc, &rrctl.tupinfo_old, true);
 		*tuple_info_old = rrctl.tupinfo_old.sqlStr;
+		
+		rrctl.sqlkind = 0;
+	}
+	if(NULL != htup)
+	{
+		rrctl.sqlkind = PG_LOGMINER_SQLKIND_UPDATE;
 		tupledata.t_data = htup;
 		mentalTup(&tupledata, tupdesc, &rrctl.tupinfo, false);
 		*tuple_info = rrctl.tupinfo.sqlStr;
+		
 		rrctl.sqlkind = 0;
 	}
 }
 
 /*Func control that if we reached the valid record*/
-void 
+void
 processContrl(char* relname, int	contrlkind)
 {
 
@@ -1375,8 +1458,6 @@ getTupleInfoByRecord(XLogReaderState *record, uint8 info, NameData* relname,char
 		rrctl.hasunanalysetuple = true;
 		sprintf(strtemp, "UNANALYSE:Relfilenode %d can not be handled,maybe the datadictionary does not match.", node->relNode);
 		outTempleResult(strtemp);
-		
-		/*ereport(NOTICE,(errmsg("Relfilenode %d can not be handled",node->relNode)));*/
 		return false;
 	}
 	
@@ -1423,6 +1504,7 @@ minerHeapInsert(XLogReaderState *record, XLogMinerSQL *sql_simple,uint8 info)
 	bool				sysrel = false;
 
 	memset(&relname, 0, sizeof(NameData));
+
 	sqlFind = getTupleInfoByRecord(record, info, &relname, &schname, &tupleInfo ,NULL);
 	if(!sqlFind)
 		return;
@@ -1576,6 +1658,7 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 	int						index = 0;
 	char					page[BLCKSZ] = {0};
 	bool					changepagefind = false;
+	OffsetNumber			offsetnum = InvalidOffsetNumber;
 	
 
 	memset(&rnode, 0, sizeof(RelFileNode));
@@ -1597,19 +1680,33 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 	
 	xlrec = (xl_heap_multi_insert *) XLogRecGetData(record);
 	
-	
-	if (xlrec->flags & XLH_INSERT_CONTAINS_NEW_TUPLE)
+	if(XLogRecHasBlockImage(record, 0))
 	{
-		if(XLOG_HEAP_INIT_PAGE == XLogRecGetInfo(record))
+		tldata = getTupleFromImage_mutiinsert(record, (Page)page, &datalen, xlrec->offsets[srctl.sqlindex]);
+		data = tldata;
+		if(!data)
+		{
+			elog(ERROR,"can not find imagestore about reloid=%u,blckno=%u", rnode.relNode, blkno);
+		}
+		htup = (HeapTupleHeader)rrctl.tuplem;
+		memcpy((char *) htup , data, datalen);
+	}
+	else
+	{
+		if((XLOG_HEAP_INIT_PAGE & XLogRecGetInfo(record)) && 0 == srctl.sqlindex)
 		{
 			pageInitInXlog(&rnode, MAIN_FORKNUM, blkno);
+			srctl.isinit = true;
 		}
-		if(!getImageFromStore(&rnode, MAIN_FORKNUM, blkno, (char*)page, &index))
+		if(getImageFromStore(&rnode, MAIN_FORKNUM, blkno, (char*)page, &index))
 		{
-			changepagefind = false;
+			changepagefind = true;
 		}
 		else
-			changepagefind = true;
+		{
+			/*Does not find the page should not add tuple*/
+			changepagefind = false;
+		}
 		
 		if(!srctl.mutinsert)
 		{
@@ -1618,9 +1715,17 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 		}
 		else
 			data = srctl.multdata;
-	
+
+		if(srctl.isinit)
+		{
+			offsetnum =  srctl.sqlindex + FirstOffsetNumber;
+		}
+		else
+		{
+			offsetnum = xlrec->offsets[srctl.sqlindex];
+		}
 		ItemPointerSetBlockNumber(&target_tid, blkno);
-		ItemPointerSetOffsetNumber(&target_tid, xlrec->offsets[srctl.sqlindex]);
+		ItemPointerSetOffsetNumber(&target_tid, offsetnum);
 		xlhdr = (xl_multi_insert_tuple *) SHORTALIGN(data);
 		data = ((char *) xlhdr) + SizeOfMultiInsertTuple;
 		datalen = xlhdr->datalen;
@@ -1638,22 +1743,17 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 		htup->t_ctid = target_tid;
 		if(changepagefind)
 		{
-			newlen = datalen - SizeOfHeapHeader;
-			if (InvalidOffsetNumber == PageAddItem(page, (Item) htup, newlen, xlrec->offsets[srctl.sqlindex], true, true))
-				elog(PANIC, "failed to add tuple");
+			if(debug_mode)
+			{
+				memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+				sprintf(globleStrInfo, "[minerHeap2MutiInsert]PageAddItem:offsetnum %d,relnode %u, blckno %d,index %d", offsetnum, rnode.relNode, blkno, index);
+				outTempleResult(globleStrInfo);
+			}
+			newlen = datalen + SizeofHeapTupleHeader;
+			if (InvalidOffsetNumber == PageAddItem(page, (Item) htup, newlen, offsetnum, true, true))
+				elog(ERROR, "failed to add tuple:offsetnum %d,relnode %u, blckno %d", offsetnum, rnode.relNode, blkno);
 			flushPage(index, page);
 		}
-	}
-	else
-	{	
-		tldata = getTupleFromImage_mutiinsert(record, (Page)page, &datalen, xlrec->offsets[srctl.sqlindex]);
-		data = tldata;
-		if(!data)
-		{
-			elog(ERROR,"can not find imagestore about reloid=%u,blckno=%u", rnode.relNode, blkno);
-		}
-		htup = (HeapTupleHeader)rrctl.tuplem;
-		memcpy((char *) htup , data, datalen);
 	}
 
 	
@@ -1714,7 +1814,12 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 			reAssembleDeleteSql(&srctl.sql_undo, true);
 			srctl.sqlindex++;
 			if(srctl.sqlindex >= xlrec->ntuples)
+			{
+				srctl.sqlindex = 0;
+				srctl.multdata = NULL;
+				srctl.isinit = false;
 				srctl.mutinsert = false;
+			}
 			else
 				srctl.mutinsert = true;
 		}
