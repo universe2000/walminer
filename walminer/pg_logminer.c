@@ -1239,6 +1239,13 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 	rrctl.reloid = reloid;
 //log_printf_str1("newoffnum=");log_printf_long(xlrec->new_offnum);
 //log_printf_str1("oldoffnum=");log_printf_long(xlrec->old_offnum);
+	if(rrctl.tupdesc)
+	{
+		freetupdesc(rrctl.tupdesc);
+		rrctl.tupdesc = NULL;
+	}
+	rrctl.tupdesc = GetDescrByreloid(reloid);
+	tupdesc = rrctl.tupdesc;
 
 	do
 	{
@@ -1255,13 +1262,6 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			
 			htup = (HeapTupleHeader)tuplem;
 			memcpy((char *) htup , recdata, newlen);
-			if(rrctl.tupdesc)
-			{
-				freetupdesc(rrctl.tupdesc);
-				rrctl.tupdesc = NULL;
-			}
-			rrctl.tupdesc = GetDescrByreloid(reloid);
-			tupdesc = rrctl.tupdesc;
 		}
 		else
 		{
@@ -1384,13 +1384,7 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			{
 				htup = NULL;
 			}
-			if(rrctl.tupdesc)
-			{
-				freetupdesc(rrctl.tupdesc);
-				rrctl.tupdesc = NULL;
-			}
-			rrctl.tupdesc = GetDescrByreloid(reloid);
-			tupdesc = rrctl.tupdesc;
+
 		}
 	}while(false);
 	
