@@ -843,6 +843,11 @@ XLogFindFirstRecord(XLogReaderState *state, XLogRecPtr RecPtr)
 				   (uint32) (RecPtr >> 32), (uint32) RecPtr,
 				   (uint32) (found >> 32), (uint32) found,
 				   (uint32) (found - RecPtr));
+			if(found)
+		 	{
+		 		rrctl.logprivate.limitstartptr = state->ReadRecPtr;
+				rrctl.logprivate.limitendptr = state->EndRecPtr;
+		 	}
 			 goto out;
 		 }
 	 }
@@ -928,6 +933,7 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 			xlogfilename = getNextXlogFile((char*)(&rrctl.lfctx),false);
 			outTempleResult("Change Wal Segment To:");
 			outTempleResult(xlogfilename);
+			elog(NOTICE, "Change Wal Segment To:%s", xlogfilename);
 			if(xlogfilename)
 			{
 				split_path_fname(xlogfilename, &temp_path, &temp_fname);
