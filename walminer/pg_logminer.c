@@ -51,6 +51,10 @@ static SystemClass sysclass[PG_LOGMINER_SYSCLASS_MAX];
 static int sysclassNum = 0;
 RelationKind *relkind_miner;
 
+XLogMinerSQL	sql_reass;
+XLogMinerSQL	sql;
+
+
 SysClassLevel ImportantSysClass[] = {
 	{PG_LOGMINER_IMPTSYSCLASS_PGCLASS, "pg_class", 0},
 	{PG_LOGMINER_IMPTSYSCLASS_PGDATABASE, "pg_database", 0},
@@ -70,7 +74,6 @@ SysClassLevel ImportantSysClass[] = {
 	{PG_LOGMINER_IMPTSYSCLASS_PGINHERITS, "pg_inherits", 0},
 	{PG_LOGMINER_IMPTSYSCLASS_PGTRIGGER, "pg_trigger", 0},
 	{PG_LOGMINER_IMPTSYSCLASS_PGLANGUAGE, "pg_language", 0}
-	
 };
 
 static SQLKind sqlkind[] = {
@@ -555,6 +558,7 @@ appendImage(ImageStore *image, char* page)
 		imagePtr = (ImageStore*)lfirst(lc);
 		if(imageEqueal(image,imagePtr))
 		{
+			pfree(image);
 			flushPage(loop, page);
 			return;
 		}
@@ -930,10 +934,6 @@ getTupleData_Insert(XLogReaderState *record, char** tuple_info, Oid reloid)
 		}
 		do
 		{
-			if(!getImageFromStore(&target_node, MAIN_FORKNUM, blkno, (char*)page, &index))
-			{
-				continue;
-			}
 			newlen = datalen - SizeOfHeapHeader;
 
 			Assert(datalen > SizeOfHeapHeader && newlen <= MaxHeapTupleSize);
@@ -952,6 +952,10 @@ getTupleData_Insert(XLogReaderState *record, char** tuple_info, Oid reloid)
 				memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
 				sprintf(globleStrInfo, "[getTupleData_Insert]PageAddItem:offsetnum %d,relnode %u, blckno %d",xlrec->offnum, target_node.relNode, blkno);
 				outTempleResult(globleStrInfo);
+			}
+			if(!getImageFromStore(&target_node, MAIN_FORKNUM, blkno, (char*)page, &index))
+			{
+				continue;
 			}
 			if(InvalidOffsetNumber == PageAddItem(page, (Item) htup, newlen, xlrec->offnum, true, true))
 				elog(ERROR, "failed to add tuple:offsetnum %d,relnode %u, blckno %d", xlrec->offnum, target_node.relNode, blkno);
@@ -1203,10 +1207,6 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			{
 				pageInitInXlog(&target_node, MAIN_FORKNUM, newblk);
 			}
-			if(!getImageFromStore(&target_node, MAIN_FORKNUM, newblk, (char*)page, &indexnew))
-			{
-				break;
-			}
 
 			if((xlrec->flags & XLH_UPDATE_PREFIX_FROM_OLD) || (xlrec->flags & XLH_UPDATE_SUFFIX_FROM_OLD))
 			{
@@ -1304,6 +1304,10 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 				memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
 				sprintf(globleStrInfo, "[getTupleData_Update]PageAddItem:offsetnum %d,relnode %u, blckno %d",xlrec->new_offnum, target_node.relNode, newblk);
 				outTempleResult(globleStrInfo);
+			}
+			if(!getImageFromStore(&target_node, MAIN_FORKNUM, newblk, (char*)page, &indexnew))
+			{
+				break;
 			}
 			if (InvalidOffsetNumber == PageAddItem(page, (Item) htup, newlen, xlrec->new_offnum, true, true))
 				elog(ERROR, "failed to add tuple:offsetnum %d,relnode %u, blckno %d", xlrec->new_offnum, target_node.relNode, newblk);
@@ -2094,16 +2098,14 @@ bool
 sqlParser(XLogReaderState *record, TimestampTz 	*xacttime)
 {
 	char command_sql[NAMEDATALEN] = {0};
-	XLogMinerSQL	sql_reass;
-	XLogMinerSQL	sql;
 	int				sskind = 0;
 	bool			getxact = false;
 	bool			getsql = false;
 	Oid				server_dboid = 0;
 	
-	memset(&sql_reass, 0, sizeof(XLogMinerSQL));
-	memset(&sql, 0, sizeof(XLogMinerSQL));
 
+	cleanSpace(&sql);
+	cleanSpace(&sql_reass);
 	/*parsert data that stored in a record to a simple sql */
 	getxact = XLogMinerRecord(record, &sql, xacttime);
 	/*avoid to parse the initdb  record*/
@@ -2196,8 +2198,6 @@ sqlParser(XLogReaderState *record, TimestampTz 	*xacttime)
 	rrctl.imprel = false;
 	rrctl.sysrel = false;
 	rrctl.toastrel = false;
-	freeSpace(&sql);
-	freeSpace(&sql_reass);
 	return getxact;
 }
 
@@ -2378,6 +2378,9 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 	memset(&rrctl, 0, sizeof(RecordRecycleCtl));
 	memset(&sysclass, 0, sizeof(SystemClass)*PG_LOGMINER_SYSCLASS_MAX);
 	memset(&srctl, 0, sizeof(SQLRecycleCtl));
+	memset(&sql_reass, 0, sizeof(XLogMinerSQL));
+	memset(&sql, 0, sizeof(XLogMinerSQL));
+
 	sqlnoser = 0;
 	cleanSystableDictionary();
 	checkLogminerUser();

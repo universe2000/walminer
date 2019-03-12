@@ -822,7 +822,7 @@ toastTupleAddToList(ToastTuple *tt)
 	}
 }
 
-void 
+bool 
 checkVarlena(Datum attr,struct varlena** att_return)
 {
 	text *attr_text = NULL;
@@ -838,7 +838,7 @@ checkVarlena(Datum attr,struct varlena** att_return)
 	if(!VARATT_IS_EXTERNAL_ONDISK(attr_varlena))
 	{
 		*att_return = attr_varlena;
-		return;
+		return false;
 	}
 
 	VARATT_EXTERNAL_GET_POINTER(toast_pointer, attr);
@@ -866,6 +866,7 @@ checkVarlena(Datum attr,struct varlena** att_return)
 		pfree(tmp);
 	}
 	*att_return = result;
+	return true;
 }
 
 text *
@@ -991,6 +992,8 @@ addSinglequoteFromStr(char* strPara)
 		}
 		strtemp[loopt++] = strPara[loopo++];
 	}
+	pfree(strPara);
+	strPara = NULL;
 	return strtemp;
 }
 
@@ -1064,10 +1067,14 @@ OutputToByte(text* attrpter, int attlen)
 		str_byte = (bytea*)cstringToTextWithLen(attstr, len);
 		str_datum = PointerGetDatum(str_byte);
 		str = DatumGetCString(DirectFunctionCall1(byteaout, str_datum));
+		if(str_byte)
+			pfree(str_byte);
 	}
 	appendtoSQL(&result, "encode(\'", PG_LOGMINER_SQLPARA_OTHER);
 	appendtoSQL(&result, str, PG_LOGMINER_SQLPARA_OTHER);
 	appendtoSQL(&result, "\', \'hex\')", PG_LOGMINER_SQLPARA_OTHER);
+	if(str)
+		pfree(str);
 	return result.sqlStr;
 
 }
