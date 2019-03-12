@@ -1279,6 +1279,8 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 			if((xlrec->flags & XLH_UPDATE_PREFIX_FROM_OLD) || (xlrec->flags & XLH_UPDATE_SUFFIX_FROM_OLD))
 			{
 				htup_old = (HeapTupleHeader)getTupleFromImage_update(record, (Page)page_old, &oldlen, false);
+				if(!htup_old)
+					continue;
 			}
 			recdata = XLogRecGetBlockData(record, 0, &datalen);
 			recdata_end = recdata + datalen;
