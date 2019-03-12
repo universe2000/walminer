@@ -151,6 +151,42 @@ outTempleResult(char *str)
 	fprintf(tempFileOpen,"%s\n",str);
 }
 
+void
+outVar(void *var, int kind)
+{
+	char	str[1024] = {0};
+
+	if(!tempresultout)
+		return;
+	if(1 == kind)
+	{
+		RelFileNode *rfn = NULL;
+
+		rfn = (RelFileNode *)var;
+		sprintf(str, "RelFileNode=%u/%u/%u", rfn->spcNode, rfn->dbNode, rfn->relNode);
+	}
+	else if(2 == kind)
+	{
+		sprintf(str, "BlockNum=%u", *(uint32*)var);
+	}
+	else if(3 == kind)
+	{
+		sprintf(str, "OffSetNum=%hu", *(uint32*)var);
+	}
+	else if(4 ==kind)
+	{	
+		ImageStore *image = NULL;
+
+		image = (ImageStore *)var;
+		sprintf(str, "[appendimage] relfileoid=%u,blkno=%d\n", image->rnode.relNode, image->blkno);
+	}
+	else if(5 == kind)
+	{
+		sprintf(str, "loop=%u", *(int32*)var);
+	}
+	outTempleResult(str);
+}
+
 static void 
 closeTempleResult(void)
 {
@@ -564,12 +600,8 @@ appendImage(ImageStore *image, char* page)
 		}
 	}
 	flushPage(loop, page);
-	if(tempresultout)
-	{
-		memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
-		sprintf(globleStrInfo, "[appendimage] relfileoid=%u,blkno=%d,index %d\n", image->rnode.relNode, image->blkno, loop);
-		outTempleResult(globleStrInfo);
-	}
+	outVar((void*)image, 4);
+	outVar((void*)&loop, 5);
 	rrctl.imagelist = lappend(rrctl.imagelist, image);
 }
 
@@ -894,6 +926,7 @@ getTupleData_Insert(XLogReaderState *record, char** tuple_info, Oid reloid)
 	xl_heap_insert 			*xlrec = (xl_heap_insert *) XLogRecGetData(record);
 	char					page[BLCKSZ] = {0};
 
+	outVar((void*)&xlrec->offnum, 3);
 	if(!rrctl.tupinfo_init)
 	{
 		memset(&rrctl.tupinfo, 0, sizeof(XLogMinerSQL));
@@ -1022,6 +1055,7 @@ getTupleData_Delete(XLogReaderState *record, char** tuple_info, Oid reloid)
 	int						index = 0;
 	xl_heap_delete			*xlrec = (xl_heap_delete *) XLogRecGetData(record);
 
+	outVar((void*)&xlrec->offnum, 3);
 	if(!rrctl.tupinfo_init)
 	{
 		memset(&rrctl.tupinfo, 0, sizeof(XLogMinerSQL));
@@ -1168,6 +1202,9 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 	XLogRecGetBlockTag(record, 0, &target_node, NULL, &newblk);
 	if (!XLogRecGetBlockTag(record, 1, NULL, NULL, &oldblk))
 		oldblk = newblk;
+	outVar((void*)&oldblk, 2);
+	outVar((void*)&xlrec->new_offnum, 3);
+	outVar((void*)&xlrec->old_offnum, 3);
 	ItemPointerSet(&target_tid, newblk, xlrec->new_offnum);
 	ItemPointerSet(&target_tid_old, oldblk, xlrec->old_offnum);
 	rrctl.reloid = reloid;
@@ -1438,6 +1475,8 @@ getTupleInfoByRecord(XLogReaderState *record, uint8 info, NameData* relname,char
 
 	XLogRecGetBlockTag(record, 0, &srctl.rfnode, NULL, &blknum);
 	node = &srctl.rfnode;
+	outVar((void*)&node, 1);
+	outVar((void*)&blknum, 2);
 	if(dboid != node->dbNode)
 		return false;
 
@@ -1457,7 +1496,8 @@ getTupleInfoByRecord(XLogReaderState *record, uint8 info, NameData* relname,char
 		rrctl.nomalrel = false;
 		rrctl.hasunanalysetuple = true;
 		sprintf(strtemp, "UNANALYSE:Relfilenode %d can not be handled,maybe the datadictionary does not match.", node->relNode);
-		outTempleResult(strtemp);
+		if(tempresultout)
+			outTempleResult(strtemp);
 		return false;
 	}
 	
@@ -1666,6 +1706,8 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 	memset(&relname, 0, sizeof(NameData));
 
 	XLogRecGetBlockTag(record, 0, &rnode, NULL, &blkno);
+	outVar((void*)&rnode, 1);
+	outVar((void*)&blkno, 2);
 	if(getDataDicOid() != rnode.dbNode)
 		return;
 
@@ -1773,7 +1815,8 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 		rrctl.nomalrel = false;
 		rrctl.hasunanalysetuple = true;
 		sprintf(strtemp, "UNANALYSE:Relfilenode %d can not be handled,maybe the datadictionary does not match.", rnode.relNode);
-		outTempleResult(strtemp);
+		if(tempresultout)
+			outTempleResult(strtemp);
 		
 		return;
 	}

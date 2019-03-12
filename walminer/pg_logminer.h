@@ -377,6 +377,8 @@ extern SQLRecycleCtl	srctl;
 extern uint32	sqlnoser;
 extern bool				log_mod;
 extern bool				debug_mode;
+extern bool				tempresultout;
+
 
 void appendtoSQL(XLogMinerSQL *sql_simple, char *sqlpara , int spaceKind);
 
@@ -398,5 +400,6 @@ void wipeSQLFromstr(XLogMinerSQL *sql_simple,char *fromstr,char *checkstr);
 void appendBlanktoSQL(XLogMinerSQL *sql_simple);
 
 void outTempleResult(char *str);
+void outVar(void *var, int kind);
 
 #endif

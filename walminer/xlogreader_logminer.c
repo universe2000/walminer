@@ -931,8 +931,11 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 				*sendFile = -1;
 			}
 			xlogfilename = getNextXlogFile((char*)(&rrctl.lfctx),false);
-			outTempleResult("Change Wal Segment To:");
-			outTempleResult(xlogfilename);
+			if(tempresultout)
+			{
+				outTempleResult("Change Wal Segment To:");
+				outTempleResult(xlogfilename);
+			}
 			elog(NOTICE, "Change Wal Segment To:%s", xlogfilename);
 			if(xlogfilename)
 			{
