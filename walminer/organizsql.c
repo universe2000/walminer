@@ -521,12 +521,15 @@ mentalTup(HeapTuple tuple, TupleDesc typeinfo ,XLogMinerSQL *sql_simple, bool ol
 			typoutput = typoutputfromdic;
 			if(typisvarlena)
 			{
-				checkVarlena(attr,&att_return);
+				bool	externStore = false;
+				externStore = checkVarlena(attr,&att_return);
 				if(!att_return)
 					/*should not happen*/
 					ereport(ERROR,(errmsg("There are some wrong data in record.")));
 				attr1 = CStringGetDatum(att_return);
 				strPara = convertAttrToStr(&typeinfo->attrs[i], typoutput, attr1);
+				if(externStore)
+					pfree(att_return);
 			}
 			else
 			{
@@ -540,15 +543,22 @@ mentalTup(HeapTuple tuple, TupleDesc typeinfo ,XLogMinerSQL *sql_simple, bool ol
 			typisvarlena = (!typeinfo->attrs[i].attbyval) && (-1 == typeinfo->attrs[i].attlen);
 			if(typisvarlena)
 			{
-				checkVarlena(attr,&att_return);
+				bool	externStore = false;
+				externStore = checkVarlena(attr,&att_return);
 				strPara =OutputToByte((text*)att_return, typeinfo->attrs[i].attlen);
+				if(externStore)
+					pfree(att_return);
 			}
 			else
 				strPara = OutputToByte((text*)attr, typeinfo->attrs[i].attlen);
 			quoset = false;
 		}
 		mentalTup_valuedata(natts, i, &values_sql,&att_sql, valueappend, attdroped, quoset, strPara, typeinfo, &firstattget);
-		
+		if(strPara)
+		{
+			pfree(strPara);
+			strPara = NULL;
+		}
 	}
 	if(valueappend)
 	{
@@ -606,7 +616,7 @@ reAssembleUpdateSql(XLogMinerSQL *sql_ori, bool undo)
 	}
 	typeinfo = rrctl.tupdesc;
 	natts = typeinfo->natts;
-	old_strPara_arr = (char**)palloc(natts * sizeof(char*));
+	old_strPara_arr = (char**)palloc0(natts * sizeof(char*));
 
 	if(!undo)
 	{
@@ -657,23 +667,28 @@ reAssembleUpdateSql(XLogMinerSQL *sql_ori, bool undo)
 			{
 				if(!nulls[i])
 				{
-					checkVarlena(attr,&att_return);
+					bool	externStore = false;
+					externStore = checkVarlena(attr,&att_return);
 					if(!att_return)
 						/*should not happen*/
 					ereport(ERROR,(errmsg("wrong varlena data")));
 					attr1 = CStringGetDatum(att_return);
 					strPara = convertAttrToStr(&typeinfo->attrs[i], typoutput, attr1);
-					att_return = NULL;
+					if(externStore)
+						pfree(att_return);
 				}
 				if(!nulls_old[i])
 				{
-					checkVarlena(attr_old,&att_return);
+					bool	externStore = false;
+					externStore = checkVarlena(attr_old,&att_return);
 					if(!att_return)
 						/*should not happen*/
 					ereport(ERROR,(errmsg("wrong varlena data")));
 					attr_old1 = CStringGetDatum(att_return);
 					strPara_old = convertAttrToStr(&typeinfo->attrs[i],typoutput, attr_old1);
 					old_strPara_arr[i] = strPara_old;
+					if(externStore)
+						pfree(att_return);
 				}
 			}
 			else
@@ -697,20 +712,27 @@ reAssembleUpdateSql(XLogMinerSQL *sql_ori, bool undo)
 			{
 				if(!nulls[i])
 				{
-					checkVarlena(attr,&att_return);
+					bool	externStore = false;
+					
+					externStore = checkVarlena(attr,&att_return);
 					if(!att_return)
 						/*should not happen*/
 					ereport(ERROR,(errmsg("wrong varlena data")));
 					strPara =OutputToByte(att_return, typeinfo->attrs[i].attlen);
-
+					if(externStore)
+						pfree(att_return);
 					att_return = NULL;
 				}
 
 				if(!nulls_old[i])
 				{
-					checkVarlena(attr_old,&att_return);
+					bool	externStore = false;
+					
+					externStore = checkVarlena(attr_old,&att_return);
 					strPara_old =OutputToByte(att_return, typeinfo->attrs[i].attlen);
 					old_strPara_arr[i] = strPara_old;
+					if(externStore)
+						pfree(att_return);
 				}
 			}
 			else
@@ -753,6 +775,9 @@ reAssembleUpdateSql(XLogMinerSQL *sql_ori, bool undo)
 				appendtoSQL_simquo(sql_ori, strPara, quoset);
 			getchange = true;
 		}
+		if(strPara)
+			pfree(strPara);
+		strPara = NULL;
 	}
 	/*we get nothing changed,discard the update SQL*/
 	if(!getchange)
@@ -843,6 +868,11 @@ reAssembleUpdateSql(XLogMinerSQL *sql_ori, bool undo)
 			getcondition = true;
 		}
 		count_value++;
+		if(strPara_old)
+		{
+			pfree(strPara_old);
+			strPara_old = NULL;
+		}
 	}
 	
 	if(undo)
@@ -929,12 +959,15 @@ reAssembleDeleteSql(XLogMinerSQL *sql_ori, bool undo)
 			typoutput = typoutputfromdic;
 			if(typisvarlena && !nulls[i])
 			{
-				checkVarlena(attr,&att_return);
+				bool	externStore = false;
+				externStore = checkVarlena(attr,&att_return);
 				if(!att_return)
 					/*should not happen*/
 					ereport(ERROR,(errmsg("There are some wrong data in record.")));
 				attr1 = CStringGetDatum(att_return);
 				strPara = convertAttrToStr(&typeinfo->attrs[i], typoutput, attr1);
+				if(externStore)
+					pfree(att_return);
 			}
 			else if(!nulls[i])
 				{
@@ -948,11 +981,15 @@ reAssembleDeleteSql(XLogMinerSQL *sql_ori, bool undo)
 			typisvarlena = (!typeinfo->attrs[i].attbyval) && (-1 == typeinfo->attrs[i].attlen);
 			if(typisvarlena && !nulls[i])
 			{
-				checkVarlena(attr,&att_return);
+				bool	externStore = false;
+				
+				externStore = checkVarlena(attr,&att_return);
 				if(!att_return)
 					/*should not happen*/
 					ereport(ERROR,(errmsg("There are some wrong data in record.")));
 				strPara =OutputToByte(att_return, typeinfo->attrs[i].attlen);
+				if(externStore)
+					pfree(att_return);
 			}
 			else if(!nulls[i])
 				strPara = OutputToByte((text*)attr, typeinfo->attrs[i].attlen);
@@ -1002,8 +1039,12 @@ reAssembleDeleteSql(XLogMinerSQL *sql_ori, bool undo)
 			getcondition = true;
 		}
 		count_value++;
+		if(strPara)
+		{
+			pfree(strPara);
+			strPara = NULL;
+		}
 	}
-	strPara = NULL;
 	/*append ctid condition*/
 	if(undo)
 	{

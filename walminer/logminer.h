@@ -237,7 +237,7 @@ int getSqlkindIdByKind(char kind);
 void cleanMentalvalues(void);
 void getUpdateTupleData(XLogMinerSQL *sql_ori, XLogMinerSQL *sqlTuple, bool fromnewtup);
 void getUpdateAttData(XLogMinerSQL *sql_ori,char *term,int loc,bool fromnewtup);
-void  checkVarlena(Datum attr,struct varlena** att_return);
+bool  checkVarlena(Datum attr,struct varlena** att_return);
 void mentalTup(HeapTuple tuple, TupleDesc typeinfo ,XLogMinerSQL *sql_simple, bool olddata);
 void getInsertSQL(XLogMinerSQL *sql_simple, char *tupleInfo, NameData *relname, char* schname, bool sysrel);
 void getDeleteSQL(XLogMinerSQL *sql_simple, char *tupleInfo, NameData *relname, char* schname, bool sysrel, bool undo);

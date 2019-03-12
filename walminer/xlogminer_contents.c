@@ -11,14 +11,46 @@
 #include "utils/builtins.h"
 #include "catalog/indexing.h"
 #include "datadictionary.h"
- 
+
+static int64 countSQLspace(void);
+
+static int64
+countSQLspace(void)
+{
+	int							loop = 0;
+	int64						countresult = 0;	
+	XlogminerContentsFirst*		xcftemp = NULL;
+
+	
+	if(srctl.xcf)
+	{
+		xcftemp = (XlogminerContentsFirst*)srctl.xcf;
+		for(loop = 0;loop < srctl.xcfcurnum; loop++)
+		{
+			xcftemp[loop].xid = 0;
+
+			countresult += xcftemp[loop].op_text.tot_size;
+			countresult += xcftemp[loop].op_undo.tot_size;
+			countresult += xcftemp[loop].op_type.tot_size;
+			countresult += xcftemp[loop].record_database.tot_size;
+			countresult += xcftemp[loop].record_schema.tot_size;
+			countresult += xcftemp[loop].record_tablespace.tot_size;
+			countresult += xcftemp[loop].record_user.tot_size;
+		}
+		countresult += srctl.xcftotnum * sizeof(XlogminerContentsFirst);
+	}
+	return countresult;
+}
+
 
 
 void
 addSQLspace(void)
 {
 	int							addstep = PG_XLOGMINER_CONTENTS_SPACE_ADDSTEP;
-	XlogminerContentsFirst*		xcftemp = NULL; 
+	XlogminerContentsFirst*		xcftemp = NULL;
+	static int64				sqlCacheLength = 0;
+	int64						tempLength = 0;
 	
 	if(!srctl.xcf)
 	{
@@ -37,6 +69,13 @@ addSQLspace(void)
 		logminer_pfree((char*)srctl.xcf,0);
 		srctl.xcf = (char*)xcftemp;
 		srctl.xcftotnum += addstep;
+	}
+	tempLength = countSQLspace();
+
+	if(200*1024*1024 <= tempLength - sqlCacheLength && 400*1024*1024 <= tempLength)
+	{
+		sqlCacheLength = tempLength;
+		elog(NOTICE, "Analyse intermediate result is more than %ldMB which stored in memery.", sqlCacheLength/(1024*1024));
 	}
 	padNullToXC();
 }
