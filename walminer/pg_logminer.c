@@ -1706,7 +1706,7 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 	memset(&relname, 0, sizeof(NameData));
 
 	XLogRecGetBlockTag(record, 0, &rnode, NULL, &blkno);
-	outVar((void*)rnode, 1);
+	outVar((void*)&rnode, 1);
 	outVar((void*)&blkno, 2);
 	if(getDataDicOid() != rnode.dbNode)
 		return;
