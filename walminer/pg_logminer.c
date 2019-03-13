@@ -1413,7 +1413,10 @@ getTupleData_Update(XLogReaderState *record, char** tuple_info, char** tuple_inf
 		memcpy((char *) tuplem_old, htup_old, datalen);
 		htup_old = (HeapTupleHeader)tuplem_old;
 	}while(false);
-
+	if(rrctl.toastrel)
+	{
+		return;
+	}
 	if(NULL != htup_old)
 	{
 		rrctl.sqlkind = PG_LOGMINER_SQLKIND_UPDATE;
@@ -1515,9 +1518,9 @@ getTupleInfoByRecord(XLogReaderState *record, uint8 info, NameData* relname,char
 	}
 	/*We does not care unuseful catalog relation
 		We does not care update toast relation*/
-	if((rrctl.sysrel && !rrctl.imprel)
+	/*if((rrctl.sysrel && !rrctl.imprel)
 		|| (rrctl.toastrel && XLOG_HEAP_UPDATE == info))
-		return false;	
+		return false;	*/
 	if(XLOG_HEAP_INSERT == info && RM_HEAP_ID == rmid)
 	{
 		getTupleData_Insert(record, tuple_info, reloid);
