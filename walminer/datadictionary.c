@@ -1814,6 +1814,20 @@ getnsoidByReloid(Oid reloid)
 	return result;
 }
 
+
+Oid
+gettoastRelidByReloid(Oid reloid)
+{
+	Form_pg_class	fpc = NULL;
+	Oid				result = 0;
+
+	fpc = (Form_pg_class)logminer_getFormByOid(PG_LOGMINER_IMPTSYSCLASS_PGCLASS, reloid);
+	if(fpc)
+		result = fpc->reltoastrelid;
+	return result;
+}
+
+
 char*
 getnsNameByOid(Oid schoid)
 {

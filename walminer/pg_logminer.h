@@ -156,6 +156,7 @@ typedef struct ToastTuple
 	int		chunk_seq;
 	char	*chunk_data;
 	int		datalength;
+	Oid		toastrelid;
 	struct ToastTuple* next;
 }ToastTuple;
 
@@ -380,6 +381,8 @@ extern uint32	sqlnoser;
 extern bool				log_mod;
 extern bool				debug_mode;
 extern bool				tempresultout;
+extern char				globleStrInfo[PG_DEBUG_STRINFO_SIZE];
+
 
 
 void appendtoSQL(XLogMinerSQL *sql_simple, char *sqlpara , int spaceKind);

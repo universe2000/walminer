@@ -218,7 +218,7 @@ outTempleResult(char *str)
 			elog(ERROR,"can not open file %s to write",filename);
 	}
 	fprintf(tempFileOpen,"%s\n",str);
-	//fflush(tempFileOpen);
+	fflush(tempFileOpen);
 }
 
 void
@@ -1087,7 +1087,7 @@ getTupleData_Insert(XLogReaderState *record, char** tuple_info, Oid reloid)
 			chunk_id = DatumGetObjectId(fastgetattr(&tupledata, 1, tupdesc, &isnull));
 			chunk_seq =DatumGetInt32(fastgetattr(&tupledata, 2, tupdesc, &isnull));
 			chunk_data = DatumGetPointer(fastgetattr(&tupledata, 3, tupdesc, &isnull));
-			toastTupleAddToList(makeToastTuple(VARSIZE(chunk_data) - VARHDRSZ, VARDATA(chunk_data), chunk_id, chunk_seq));
+			toastTupleAddToList(makeToastTuple(VARSIZE(chunk_data) - VARHDRSZ, VARDATA(chunk_data), chunk_id, chunk_seq, rrctl.reloid));
 			return;
 		}
 		else
@@ -1205,7 +1205,7 @@ getTupleData_Delete(XLogReaderState *record, char** tuple_info, Oid reloid)
 			chunk_id = DatumGetObjectId(fastgetattr(&tupledata, 1, tupdesc, &isnull));
 			chunk_seq =DatumGetInt32(fastgetattr(&tupledata, 2, tupdesc, &isnull));
 			chunk_data = DatumGetPointer(fastgetattr(&tupledata, 3, tupdesc, &isnull));
-			toastTupleAddToList(makeToastTuple(VARSIZE(chunk_data) - VARHDRSZ, VARDATA(chunk_data), chunk_id, chunk_seq));
+			toastTupleAddToList(makeToastTuple(VARSIZE(chunk_data) - VARHDRSZ, VARDATA(chunk_data), chunk_id, chunk_seq, rrctl.reloid));
 			return;
 		}
 		else
@@ -1986,9 +1986,9 @@ parserInsertSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
 	{
 		appendtoSQL(sql_opt,sql_ori->sqlStr,PG_LOGMINER_SQLPARA_SIMSTEP);
 		/*Here reached,it is not in toat,so try to free tthead*/
-		freeToastTupleHead();
 		return true;
 	}
+	freeToastTupleHeadByoid(rrctl.reloid);
 	return false;
 }
 
@@ -2005,9 +2005,9 @@ parserDeleteSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
 	{
 		if(0 == rrctl.prostatu)
 			reAssembleDeleteSql(sql_ori, false);
-		freeToastTupleHead();
 		appendtoSQL(sql_opt,sql_ori->sqlStr,PG_LOGMINER_SQLPARA_SIMSTEP);
 	}
+	freeToastTupleHeadByoid(rrctl.reloid);
 	return true;
 }
 
@@ -2024,10 +2024,10 @@ parserUpdateSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
 	{
 		if(0 == rrctl.prostatu)
 			reAssembleUpdateSql(sql_ori, false);
-		freeToastTupleHead();
 		if(sql_ori->sqlStr)
 			appendtoSQL(sql_opt,sql_ori->sqlStr,PG_LOGMINER_SQLPARA_SIMSTEP);
 	}
+	freeToastTupleHeadByoid(rrctl.reloid);
 	return true;
 }
 
@@ -2434,8 +2434,6 @@ xlogminer_xlogfile_list(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx = NULL;
 	logminer_fctx	*temp_fctx = NULL;
-
-	//elog(ERROR,"this function is does not support on pg11 now.");
 	if (SRF_IS_FIRSTCALL())
 	{
 		logminer_fctx	*fctx = NULL;

@@ -567,6 +567,7 @@ curXactCheck(TimestampTz xact_time ,TransactionId xid, bool xactcommit,xl_xact_p
 			InsertXlogContentsTuple(&fxc);
 		}
 		cleanSQLspace();
+		freeToastTupleHead();
 	}
 	return result;
 }
@@ -772,7 +773,7 @@ ifQueNeedDelete(Form_pg_attribute attrs)
 }
 
 ToastTuple*
-makeToastTuple(int datalength,char* data, Oid id, int seq)
+makeToastTuple(int datalength,char* data, Oid id, int seq, Oid reloid)
 {
 	char* ptr = NULL;
 	ToastTuple*	result = NULL;
@@ -782,6 +783,7 @@ makeToastTuple(int datalength,char* data, Oid id, int seq)
 
 	result->chunk_id = id;
 	result->chunk_seq = seq;
+	result->toastrelid = reloid;
 	result->datalength = datalength;
 	result->next = NULL;
 	memcpy(result->chunk_data, data, datalength);
@@ -802,6 +804,52 @@ freeToastTupleHead(void)
 		ttptr = ttnext;
 	}
 	rrctl.tthead = NULL;
+}
+
+
+void
+freeToastTupleHeadByoid(Oid reloid)
+{
+	ToastTuple *ttptr = NULL, *ttprev = NULL;
+	bool		needfree = false;
+	Oid 		toastreloid = 0;
+
+	ttptr = rrctl.tthead;
+	ttprev = NULL;
+
+	toastreloid = gettoastRelidByReloid(reloid);
+	if(0 == toastreloid)
+		return;
+	while(ttptr)
+	{
+		if(toastreloid == ttptr->toastrelid)
+		{
+			needfree = true;
+		}
+		if(needfree)
+		{
+			needfree = false;
+			if(ttptr == rrctl.tthead)
+			{
+				rrctl.tthead = ttptr->next;
+				logminer_pfree((char*)ttptr,0);
+				ttptr = rrctl.tthead;
+				ttprev = NULL;
+			}
+			else
+			{
+				ttprev->next = ttptr->next;
+				logminer_pfree((char*)ttptr,0);
+				ttptr = ttprev->next;
+			}
+		}
+		else
+		{
+			ttprev = ttptr;
+			ttptr = ttptr->next;
+		}
+		
+	}
 }
 
 void
@@ -853,7 +901,7 @@ checkVarlena(Datum attr,struct varlena** att_return)
 	ttptr = rrctl.tthead;
 	while(ttptr)
 	{
-		if(ttptr->chunk_id == toast_pointer.va_valueid)
+		if(ttptr->chunk_id == toast_pointer.va_valueid && ttptr->toastrelid == toast_pointer.va_toastrelid)
 		{
   			memcpy(VARDATA(result) + ttptr->chunk_seq * TOAST_MAX_CHUNK_SIZE, ttptr->chunk_data, ttptr->datalength);
 		}
