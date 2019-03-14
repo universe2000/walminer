@@ -122,6 +122,7 @@ Oid gettuserOidByReloid(Oid reloid);
 char* getuserNameByUseroid(Oid useroid);
 Oid getuserOidByUsername(char *user_name);
 Oid getnsoidByReloid(Oid reloid);
+Oid gettoastRelidByReloid(Oid reloid);
 char* getnsNameByOid(Oid schoid);
 char* getnsNameByReloid(Oid reloid);
 bool getLangNameByOid(Oid langoid, NameData* langname);
