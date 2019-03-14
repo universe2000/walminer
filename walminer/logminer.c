@@ -876,9 +876,10 @@ checkVarlena(Datum attr,struct varlena** att_return)
 	text *attr_text = NULL;
 	ToastTuple *ttptr = NULL;
 	struct varlena *attr_varlena = NULL;
-	struct varlena *result;
+	struct varlena *result = NULL;
 	struct varatt_external toast_pointer;
 	int32		ressize = 0;
+	bool		gettoastdata = false;
 	
 	attr_text = (text*)DatumGetPointer(attr);
 	attr_varlena = (struct varlena *)attr_text;
@@ -903,10 +904,13 @@ checkVarlena(Datum attr,struct varlena** att_return)
 	{
 		if(ttptr->chunk_id == toast_pointer.va_valueid && ttptr->toastrelid == toast_pointer.va_toastrelid)
 		{
+			gettoastdata = true;
   			memcpy(VARDATA(result) + ttptr->chunk_seq * TOAST_MAX_CHUNK_SIZE, ttptr->chunk_data, ttptr->datalength);
 		}
 		ttptr = ttptr->next;
 	}
+	if(!gettoastdata)
+		elog(ERROR, "can not get toast data:toastrel->%u chunk_id->%u",toast_pointer.va_toastrelid, toast_pointer.va_valueid);
 	if (VARATT_IS_COMPRESSED(result))
 	{
 		struct varlena *tmp = result;
