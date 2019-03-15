@@ -18,6 +18,9 @@
 #include "datadictionary.h"
 #include "utils/builtins.h"
 
+#define	TOSTADATA_NOTFOUNT	"TOAST_DATA_NOT_FOUND"
+
+
 
 RelationKind relkind[]={
 	{LOGMINER_SQLGET_DDL_CREATE_TABLE,LOGMINER_RELKINDID_TABLE,"TABLE",'r',true},
@@ -910,7 +913,13 @@ checkVarlena(Datum attr,struct varlena** att_return)
 		ttptr = ttptr->next;
 	}
 	if(!gettoastdata)
-		elog(ERROR, "can not get toast data:toastrel->%u chunk_id->%u",toast_pointer.va_toastrelid, toast_pointer.va_valueid);
+	{
+		pfree(result);
+		result = cstringToTextWithLen(TOSTADATA_NOTFOUNT, strlen(TOSTADATA_NOTFOUNT));
+		elog(NOTICE, "get a attribute value that can not find toast data and replace with \'%s\'", TOSTADATA_NOTFOUNT);
+		*att_return = result;
+		return false;
+	}
 	if (VARATT_IS_COMPRESSED(result))
 	{
 		struct varlena *tmp = result;
