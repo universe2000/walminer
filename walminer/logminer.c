@@ -474,7 +474,15 @@ inputParaCheck(char *st, char *et)
 	if(rrctl.logprivate.timecheck || rrctl.logprivate.xidcheck)
 		rrctl.logprivate.staptr_reached = false;
 	else
+	{
+		if(debug_mode)
+		{
+			memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+			sprintf(globleStrInfo, "[xactcheck]user does not range");
+			outTempleResult(globleStrInfo);			
+		}
 		rrctl.logprivate.staptr_reached = true;
+	}
 	rrctl.logprivate.endptr_reached = false;
 	rrctl.logprivate.timeline = 1;
 	rrctl.logprivate.startptr = InvalidXLogRecPtr;
@@ -530,6 +538,12 @@ curXactCheck(TimestampTz xact_time ,TransactionId xid, bool xactcommit,xl_xact_p
 		/*first reached the valid(input valid) xlog tuple*/
 		rrctl.xlogreader_state->ReadRecPtr = rrctl.logprivate.limitstartptr;
 		rrctl.xlogreader_state->EndRecPtr = rrctl.logprivate.limitendptr;
+		if(debug_mode)
+		{
+			memset(globleStrInfo, 0, PG_DEBUG_STRINFO_SIZE);
+			sprintf(globleStrInfo, "[xactcheck]reach user point range");
+			outTempleResult(globleStrInfo);			
+		}
 		rrctl.logprivate.staptr_reached = true;
 
 	}
