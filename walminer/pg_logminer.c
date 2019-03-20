@@ -653,7 +653,8 @@ appendImage(ImageStore *image, char* page)
 	ImageStore 	*imagePtr = NULL;
 	ListCell	*lc = NULL;
 //	static int			i = 100;
-
+	if(!rrctl.logprivate.staptr_reached)
+		return;
 	listlength = list_length(rrctl.imagelist);
 
 	for(; loop < listlength; loop++)

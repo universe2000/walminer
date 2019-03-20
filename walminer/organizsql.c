@@ -106,7 +106,7 @@ getInsertSQL(XLogMinerSQL *sql_simple, char *tupleInfo, NameData *relname, char*
 	else
 	{
 		rrctl.prostatu = LOGMINER_PROSTATUE_INSERT_MISSING_TUPLEINFO;
-		appendtoSQL(sql_simple, " VALUES(NULL) (NOTICE:wal is not enought.)", PG_LOGMINER_SQLPARA_SIMPLE);
+		appendtoSQL(sql_simple, " VALUES(NULL) (NOTICE:wal is not enough.)", PG_LOGMINER_SQLPARA_SIMPLE);
 	}
 
 	
@@ -153,7 +153,7 @@ getDeleteSQL(XLogMinerSQL *sql_simple, char *tupleInfo, NameData *relname, char*
 	else
 	{
 		rrctl.prostatu = LOGMINER_PROSTATUE_INSERT_MISSING_TUPLEINFO;
-		appendtoSQL(sql_simple, " WHERE VALUES(NULL) (NOTICE:wal is not enought.)", PG_LOGMINER_SQLPARA_SIMPLE);
+		appendtoSQL(sql_simple, " WHERE VALUES(NULL) (NOTICE:wal is not enough.)", PG_LOGMINER_SQLPARA_SIMPLE);
 	}
 	
 	appendtoSQL(sql_simple, ";", PG_LOGMINER_SQLPARA_SIMPLE);
@@ -191,7 +191,7 @@ getUpdateSQL(XLogMinerSQL *sql_simple, char *tupleInfo, char *tupleInfo_old,Name
 	else
 	{
 		rrctl.prostatu = LOGMINER_PROSTATUE_UPDATE_MISSING_NEW_TUPLEINFO;
-		appendtoSQL(sql_simple, " SET VALUES(NULL) (NOTICE:wal is not enought.)", PG_LOGMINER_SQLPARA_SIMPLE);
+		appendtoSQL(sql_simple, " SET VALUES(NULL) (NOTICE:wal is not enough.)", PG_LOGMINER_SQLPARA_SIMPLE);
 	}
 
 	if(tupleInfo_old)
