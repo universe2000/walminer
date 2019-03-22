@@ -2036,9 +2036,9 @@ XLogMinerRecord_xlog(XLogReaderState *record, XLogMinerSQL *sql_simple)
 	{
 		if(rrctl.imagelist)
 		{
-			//cleanStorefile();
-			//list_free(rrctl.imagelist);
-			//rrctl.imagelist = NIL;
+			cleanStorefile();
+			list_free(rrctl.imagelist);
+			rrctl.imagelist = NIL;
 		}
 		rrctl.getcheckpoint = true;
 	}
