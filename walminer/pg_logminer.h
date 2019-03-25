@@ -203,9 +203,8 @@ typedef struct ImageStore
 	RelFileNode rnode;
 	ForkNumber	forknum;
 	BlockNumber blkno;
-
-	XLogRecPtr	ReadRecPtr;		/* start of store record read */
-	XLogRecPtr	EndRecPtr;		/* end+1 of store record read */
+//	XLogRecPtr	ReadRecPtr;		/* start of store record read */
+//	XLogRecPtr	EndRecPtr;		/* end+1 of store record read */
 	
 }ImageStore;
 

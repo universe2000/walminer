@@ -652,7 +652,9 @@ appendImage(ImageStore *image, char* page)
 	int			loop = 0;
 	ImageStore 	*imagePtr = NULL;
 	ListCell	*lc = NULL;
-//	static int			i = 100;
+	static int	imageondisklast = 0;
+	int			reporstep = (512 * 1024 * 1024) / BLCKSZ;	//512M image on disk
+	
 	if(!rrctl.logprivate.staptr_reached)
 		return;
 	listlength = list_length(rrctl.imagelist);
@@ -672,6 +674,11 @@ appendImage(ImageStore *image, char* page)
 	outVar((void*)image, 4);
 	outVar((void*)&loop, 5);
 	rrctl.imagelist = lappend(rrctl.imagelist, image);
+	if(imageondisklast + reporstep <= rrctl.imagelist->length)
+	{
+		imageondisklast = rrctl.imagelist->length;
+		elog(NOTICE, "there be %d image pages on disk", imageondisklast);
+	}
 }
 
 static void
@@ -733,8 +740,8 @@ recordStoreImage(XLogReaderState *record)
 
 		image->forknum = bkpb->forknum;
 		image->blkno = bkpb->blkno;
-		image->EndRecPtr = record->EndRecPtr;
-		image->ReadRecPtr = record->ReadRecPtr;
+//		image->EndRecPtr = record->EndRecPtr;
+//		image->ReadRecPtr = record->ReadRecPtr;
 
 		if(getBlockImage(record, block_id, page))
 			appendImage(image, page);
@@ -2092,7 +2099,7 @@ XLogMinerRecord_dbase(XLogReaderState *record, XLogMinerSQL *sql_simple)
 		minerDbCreate(record, sql_simple, info);
 	}
 }
-
+/*
 static void
 XLogMinerRecord_xlog(XLogReaderState *record, XLogMinerSQL *sql_simple)
 {
@@ -2110,7 +2117,7 @@ XLogMinerRecord_xlog(XLogReaderState *record, XLogMinerSQL *sql_simple)
 		rrctl.getcheckpoint = true;
 	}
 }
-
+*/
 
 static void
 XLogMinerRecord_xact(XLogReaderState *record, XLogMinerSQL *sql_simple, TimestampTz *xacttime)
@@ -2205,7 +2212,12 @@ XLogMinerRecord(XLogReaderState *record, XLogMinerSQL *sql_simple,TimestampTz *x
 	}
 	else if(RM_XLOG_ID == rmid)
 	{
-		XLogMinerRecord_xlog(record, sql_simple);
+		/*code here for clean image space on disk
+		* but it has something wrong because of delay of checkpoint
+		* now we doen not clean it.
+		*/
+		//XLogMinerRecord_xlog(record, sql_simple);
+		;
 	}
 	
 	return getxact;
