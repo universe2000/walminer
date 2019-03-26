@@ -460,6 +460,43 @@ imageEqueal(ImageStore *image1, ImageStore *image2)
 
 	return true;
 }
+/*
+static void
+writeDebugPage(char *page)
+{
+	char	debugpagepath[MAXPGPATH] = {0};
+	char	*path = PG_LOGMINER_PATH;
+	char	filename[10] ={0};
+	FILE	*fp = NULL;
+	int		no = 0;
+
+	no = increpage++;
+
+	sprintf(filename,"debug_page%d",no);
+
+	
+	sprintf(debugpagepath,"%s/temp/%s", path, filename);
+	if(!create_dir(path))
+	{
+		elog(ERROR,"fail to create dir walminer under %s", DataDir);
+	}
+
+	fp = fopen(debugpagepath, "w");
+	if(!fp)
+	{
+		elog(ERROR,"fail to open file %s to write", debugpagepath);
+	}
+	fseek(fp, 0, SEEK_SET);
+	Assert(0 == ftell(fp));
+	if(BLCKSZ != fwrite(page, 1, BLCKSZ, fp))
+	{
+		elog(ERROR,"fail to write to %s", debugpagepath);
+	}
+	fclose(fp);
+	fp = NULL;
+	
+}
+*/
 
 static bool
 getImageFromStore(RelFileNode *rnode, ForkNumber forknum, BlockNumber blkno, char* page, int *index)
@@ -522,6 +559,7 @@ flushPage(int index, char* page)
 	char	*path = PG_LOGMINER_PATH;
 	char	*filename = "soreimage";
 	FILE	*fp = NULL;
+	int64	seeksize = 0;
 
 	Assert(page);
 	sprintf(storefile,"%s/%s", path, filename);
@@ -539,7 +577,11 @@ flushPage(int index, char* page)
 	Assert(0 == ftell(fp));
 	Assert(0 <= index);
 	if(0 != index)
-		fseek(fp, index * BLCKSZ, SEEK_SET);
+	{
+		seeksize = (int64)index * BLCKSZ;
+		fseek(fp, seeksize, SEEK_SET);
+		
+	}
 	if(BLCKSZ != fwrite(page, 1, BLCKSZ, fp))
 	{
 		elog(ERROR,"fail to write to %s", storefile);
@@ -574,7 +616,7 @@ readPage(int index, char* page)
 	char	*path = PG_LOGMINER_PATH;
 	char	*filename = PG_LOGMINER_STOREIMAGE_FILENAME;
 	FILE	*fp = NULL;
-
+	int64	seeksize = 0;
 	Assert(page);
 	sprintf(storefile,"%s/%s", path, filename);
 
@@ -587,7 +629,10 @@ readPage(int index, char* page)
 	Assert(0 == ftell(fp));
 	Assert(0 <= index);
 	if(0 != index)
-		fseek(fp, index * BLCKSZ, SEEK_SET);
+	{
+		seeksize = (int64)index * BLCKSZ;
+		fseek(fp, seeksize, SEEK_SET);
+	}
 	if(BLCKSZ != fread(page, 1, BLCKSZ, fp))
 	{
 		elog(ERROR,"fail to read %s", storefile);
