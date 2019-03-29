@@ -98,7 +98,7 @@
 #define PG_LOGMINER_TABLE_CLASS			"pg_class"
 
 #define	PG_LOGMINER_PATH				"walminer"
-#define	PG_LOGMINER_STOREIMAGE_FILENAME "soreimage"
+#define	PG_LOGMINER_STOREIMAGE_FILENAME "storeimage"
 #define	PG_LOGMINER_TEMPRESULT_FILENAME "tempresult"
 
 #define	PG_DEBUG_STRINFO_SIZE			1000
@@ -256,6 +256,7 @@ typedef struct RecordRecycleCtl
 	List				*imagelist;
 
 	bool				hasunanalysetuple;
+	int					countCheckpoint;
 }RecordRecycleCtl;
 
 typedef struct Attribute *AttPtr;
