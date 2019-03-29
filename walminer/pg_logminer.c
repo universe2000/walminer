@@ -2077,7 +2077,7 @@ XLogMinerRecord_dbase(XLogReaderState *record, XLogMinerSQL *sql_simple)
 		minerDbCreate(record, sql_simple, info);
 	}
 }
-/*
+
 static void
 XLogMinerRecord_xlog(XLogReaderState *record, XLogMinerSQL *sql_simple)
 {
@@ -2086,16 +2086,23 @@ XLogMinerRecord_xlog(XLogReaderState *record, XLogMinerSQL *sql_simple)
 	info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 	if(XLOG_CHECKPOINT_ONLINE == info || XLOG_CHECKPOINT_SHUTDOWN == info)
 	{
-		if(rrctl.imagelist)
+
+		if(2 > rrctl.countCheckpoint)
 		{
-			cleanStorefile();
-			list_free(rrctl.imagelist);
-			rrctl.imagelist = NIL;
+			rrctl.countCheckpoint++;
 		}
-		rrctl.getcheckpoint = true;
+		if(2 == rrctl.countCheckpoint)
+		{
+			CheckPoint	checkPoint;
+
+			memcpy(&checkPoint, XLogRecGetData(record), sizeof(CheckPoint));
+			elog(NOTICE,"wal record after time %s or %x/%x will be analyse completely", 
+					timestamptz_to_str(time_t_to_timestamptz(checkPoint.time)), ((uint32)(record->EndRecPtr >> 32)), (uint32)record->EndRecPtr);
+			rrctl.countCheckpoint = 100;
+		}
 	}
 }
-*/
+
 
 static void
 XLogMinerRecord_xact(XLogReaderState *record, XLogMinerSQL *sql_simple, TimestampTz *xacttime)
@@ -2190,12 +2197,7 @@ XLogMinerRecord(XLogReaderState *record, XLogMinerSQL *sql_simple,TimestampTz *x
 	}
 	else if(RM_XLOG_ID == rmid)
 	{
-		/*code here for clean image space on disk
-		* but it has something wrong because of delay of checkpoint
-		* now we doen not clean it.
-		*/
-		//XLogMinerRecord_xlog(record, sql_simple);
-		;
+		XLogMinerRecord_xlog(record, sql_simple);
 	}
 	
 	return getxact;
