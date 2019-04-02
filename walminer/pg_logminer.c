@@ -490,7 +490,7 @@ flushPage(int index, char* page)
 {
 	char	storefile[MAXPGPATH] = {0};
 	char	*path = PG_LOGMINER_PATH;
-	char	*filename = "soreimage";
+	char	*filename = PG_LOGMINER_STOREIMAGE_FILENAME;
 	FILE	*fp = NULL;
 	int64	seeksize = 0;
 
