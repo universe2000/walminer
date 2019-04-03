@@ -252,6 +252,13 @@ appendtoSQL(XLogMinerSQL *sql_simple, char *sqlpara , int spaceKind)
 void
 appendtoSQL_simquo(XLogMinerSQL *sql_simple, char* ptr, bool quoset)
 {
+	char	*ptrnull = "''";
+
+	if(0 == strlen(ptr))
+	{
+		ptr = ptrnull;
+		quoset = false;
+	}
 	if(quoset)
 		appendtoSQL(sql_simple, "\'", PG_LOGMINER_SQLPARA_OTHER);
 	appendtoSQL(sql_simple, ptr, PG_LOGMINER_SQLPARA_OTHER);
