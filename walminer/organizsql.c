@@ -829,13 +829,15 @@ reAssembleUpdateSql(XLogMinerSQL *sql_ori, bool undo)
 				sprintf(temp_name, "COL%d", i+1);
 				appendtoSQL_doubquo(sql_ori, temp_name, true);
 			}
-			appendtoSQL(sql_ori, "=", PG_LOGMINER_SQLPARA_OTHER);
+			
 			if(!nulls_old[i])
 			{
+				appendtoSQL(sql_ori, "=", PG_LOGMINER_SQLPARA_OTHER);
 				appendtoSQL_simquo(sql_ori, strPara_old, quoset);
 			}
 			else
 			{
+				appendtoSQL(sql_ori, " is ", PG_LOGMINER_SQLPARA_OTHER);
 				appendtoSQL_simquo(sql_ori, "NULL", false);
 			}
 			appendtoSQL_valuetyptrans(sql_ori, typeinfo->attrs[i].atttypid);
@@ -855,13 +857,15 @@ reAssembleUpdateSql(XLogMinerSQL *sql_ori, bool undo)
 				sprintf(temp_name, "COL%d", i+1);
 				appendtoSQL_doubquo(sql_ori, temp_name, true);
 			}
-			appendtoSQL(sql_ori, "=", PG_LOGMINER_SQLPARA_OTHER);
+			
 			if(!nulls_old[i])
 			{
+				appendtoSQL(sql_ori, "=", PG_LOGMINER_SQLPARA_OTHER);
 				appendtoSQL_simquo(sql_ori, strPara_old, quoset);
 			}
 			else
 			{
+				appendtoSQL(sql_ori, " is ", PG_LOGMINER_SQLPARA_OTHER);
 				appendtoSQL_simquo(sql_ori, "NULL", false);
 			}
 			appendtoSQL_valuetyptrans(sql_ori, typeinfo->attrs[i].atttypid);
@@ -1008,11 +1012,17 @@ reAssembleDeleteSql(XLogMinerSQL *sql_ori, bool undo)
 				sprintf(temp_name, "COL%d", i+1);
 				appendtoSQL_doubquo(sql_ori, temp_name, true);
 			}
-			appendtoSQL(sql_ori, "=", PG_LOGMINER_SQLPARA_OTHER);
+			
 			if(strPara)
+			{
+				appendtoSQL(sql_ori, "=", PG_LOGMINER_SQLPARA_OTHER);
 				appendtoSQL_simquo(sql_ori, strPara, quoset);
+			}
 			else
+			{
+				appendtoSQL(sql_ori, " is ", PG_LOGMINER_SQLPARA_OTHER);
 				appendtoSQL_simquo(sql_ori, "NULL", false);
+			}
 			appendtoSQL_valuetyptrans(sql_ori, typeinfo->attrs[i].atttypid);
 			getcondition = true;
 		}
@@ -1030,11 +1040,17 @@ reAssembleDeleteSql(XLogMinerSQL *sql_ori, bool undo)
 				sprintf(temp_name, "COL%d", i+1);
 				appendtoSQL_doubquo(sql_ori, temp_name, true);
 			}
-			appendtoSQL(sql_ori, "=", PG_LOGMINER_SQLPARA_OTHER);
+			
 			if(strPara)
+			{
+				appendtoSQL(sql_ori, "=", PG_LOGMINER_SQLPARA_OTHER);
 				appendtoSQL_simquo(sql_ori, strPara, quoset);
+			}
 			else
+			{
+				appendtoSQL(sql_ori, " is ", PG_LOGMINER_SQLPARA_OTHER);
 				appendtoSQL_simquo(sql_ori, "NULL", false);
+			}
 			appendtoSQL_valuetyptrans(sql_ori, typeinfo->attrs[i].atttypid);
 			getcondition = true;
 		}
