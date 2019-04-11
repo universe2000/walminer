@@ -416,6 +416,7 @@ checkXlogFileValid(char *path,int pathkind)
 	XLogSegNo				segnocheck = 0;
 	
 	XLogLongPageHeaderData 	xlphd;
+	getWalSegSz(path);
 	
 	split_path_fname(path,&filedir,&filename);
 	XLogFromFileName(filename, &timelinecheck, &segnocheck, rrctl.WalSegSz);
