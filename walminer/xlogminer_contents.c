@@ -25,10 +25,8 @@ countSQLspace(void)
 	if(srctl.xcf)
 	{
 		xcftemp = (XlogminerContentsFirst*)srctl.xcf;
-		for(loop = 0;loop < srctl.xcfcurnum; loop++)
+		for(loop = 0;loop < srctl.xcfmaxnum; loop++)
 		{
-			xcftemp[loop].xid = 0;
-
 			countresult += xcftemp[loop].op_text.tot_size;
 			countresult += xcftemp[loop].op_undo.tot_size;
 			countresult += xcftemp[loop].op_type.tot_size;
@@ -80,9 +78,28 @@ addSQLspace(void)
 	padNullToXC();
 }
 
+bool
+xidMatchXact(TransactionId curxid,TransactionId xidxact, TransactionId* subxids, int nsubxid)
+{
+	bool	result = false;
+	int		loop = 0;
+
+	if(curxid == xidxact)
+		result = true;
+
+	for(; loop < nsubxid; loop++)
+	{
+		if(curxid == subxids[loop])
+		{
+			result = true;
+			break;
+		}
+	}
+	return result;
+}
 
 void
-cleanSQLspace(void)
+cleanSQLspace(TransactionId xid, TransactionId* subxids, int nsubxid)
 {
 	int	loop = 0;
 	XlogminerContentsFirst*		xcftemp = NULL;
@@ -91,8 +108,14 @@ cleanSQLspace(void)
 	if(srctl.xcf)
 	{
 		xcftemp = (XlogminerContentsFirst*)srctl.xcf;
-		for(loop = 0;loop < srctl.xcfcurnum; loop++)
+		for(loop = 0;loop < srctl.xcfmaxnum; loop++)
 		{
+			if(!xidMatchXact(xcftemp[loop].xid, xid, subxids, nsubxid))
+				continue;
+			if(debug_mode)
+			{
+				logminer_elog("[cleanSQLspace]clean xid:%u", xid);
+			}
 			xcftemp[loop].xid = 0;
 			cleanSpace(&xcftemp[loop].op_text);
 			cleanSpace(&xcftemp[loop].op_undo);
@@ -101,8 +124,10 @@ cleanSQLspace(void)
 			cleanSpace(&xcftemp[loop].record_schema);
 			cleanSpace(&xcftemp[loop].record_tablespace);
 			cleanSpace(&xcftemp[loop].record_user);
+			xcftemp[loop].inuse = false;
+			srctl.xcfcurnum = (srctl.xcfcurnum > loop)?loop:srctl.xcfcurnum;
 		}
-		srctl.xcfcurnum = 0;
+		//srctl.xcfmaxnum = 0;
 	}
 	padNullToXC();
 }
@@ -117,7 +142,7 @@ freeSQLspace(void)
 	if(srctl.xcf)
 	{
 		xcftemp = (XlogminerContentsFirst*)srctl.xcf;
-		for(loop = 0;loop < srctl.xcfcurnum; loop++)
+		for(loop = 0;loop < srctl.xcfmaxnum; loop++)
 		{
 			freeSpace(&xcftemp[loop].op_text);
 			freeSpace(&xcftemp[loop].op_undo);
@@ -128,7 +153,7 @@ freeSQLspace(void)
 			freeSpace(&xcftemp[loop].record_user);
 		}
 		srctl.xcftotnum = 0;
-		srctl.xcfcurnum = 0;
+		srctl.xcfmaxnum = 0;
 		logminer_pfree(srctl.xcf,0);
 		srctl.xcf = NULL;
 	}

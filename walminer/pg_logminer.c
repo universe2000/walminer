@@ -130,6 +130,27 @@ SysClassLevel *getImportantSysClass(void)
 {
 	return ImportantSysClass;
 }
+void
+logminer_elog(const char *fmt,...)
+{
+	char	tempresultfile[MAXPGPATH] = {0};
+	char	*path = PG_LOGMINER_PATH;
+	char	*filename = PG_LOGMINER_TEMPRESULT_FILENAME;
+	va_list		args;
+
+	sprintf(tempresultfile,"%s/temp/%s", path, filename);
+	if(!tempFileOpen)
+	{
+		tempFileOpen = fopen(tempresultfile, "w");
+		if(!tempFileOpen)
+			elog(ERROR,"can not open file %s to write",filename);
+	}
+	fflush(tempFileOpen);
+	va_start(args, fmt);
+	vfprintf(tempFileOpen, _(fmt), args);
+	va_end(args);
+	fputc('\n', tempFileOpen);
+}
 
 void
 getWalSegSz(char* path)
@@ -1147,7 +1168,8 @@ getTupleData_Insert(XLogReaderState *record, char** tuple_info, Oid reloid)
 			chunk_id = DatumGetObjectId(fastgetattr(&tupledata, 1, tupdesc, &isnull));
 			chunk_seq =DatumGetInt32(fastgetattr(&tupledata, 2, tupdesc, &isnull));
 			chunk_data = DatumGetPointer(fastgetattr(&tupledata, 3, tupdesc, &isnull));
-			toastTupleAddToList(makeToastTuple(VARSIZE(chunk_data) - VARHDRSZ, VARDATA(chunk_data), chunk_id, chunk_seq, rrctl.reloid));
+			toastTupleAddToList(makeToastTuple(VARSIZE(chunk_data) - VARHDRSZ, 
+								VARDATA(chunk_data), chunk_id, chunk_seq, rrctl.reloid, XLogRecGetXid(record)));
 			return;
 		}
 		else
@@ -1265,7 +1287,8 @@ getTupleData_Delete(XLogReaderState *record, char** tuple_info, Oid reloid)
 			chunk_id = DatumGetObjectId(fastgetattr(&tupledata, 1, tupdesc, &isnull));
 			chunk_seq =DatumGetInt32(fastgetattr(&tupledata, 2, tupdesc, &isnull));
 			chunk_data = DatumGetPointer(fastgetattr(&tupledata, 3, tupdesc, &isnull));
-			toastTupleAddToList(makeToastTuple(VARSIZE(chunk_data) - VARHDRSZ, VARDATA(chunk_data), chunk_id, chunk_seq, rrctl.reloid));
+			toastTupleAddToList(makeToastTuple(VARSIZE(chunk_data) - VARHDRSZ, VARDATA(chunk_data), 
+										chunk_id, chunk_seq, rrctl.reloid, XLogRecGetXid(record)));
 			return;
 		}
 		else
@@ -2033,7 +2056,7 @@ getsqlkind(char *sqlheader)
 
 /*Parser all kinds of insert sql, and make decide what sql it will form*/
 static bool
-parserInsertSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
+parserInsertSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt, TransactionId xid)
 {
 	char tarTable[NAMEDATALEN] = {0};
 	
@@ -2048,13 +2071,13 @@ parserInsertSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
 		/*Here reached,it is not in toat,so try to free tthead*/
 		return true;
 	}
-	freeToastTupleHeadByoid(rrctl.reloid);
+	freeToastTupleHeadByoid(rrctl.reloid, xid);
 	return false;
 }
 
 /*Parser all kinds of delete sql, and make decide what sql it will form*/
 static bool
-parserDeleteSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
+parserDeleteSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt, TransactionId xid)
 {
 
 	char tarTable[NAMEDATALEN] = {0};
@@ -2067,13 +2090,13 @@ parserDeleteSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
 			reAssembleDeleteSql(sql_ori, false);
 		appendtoSQL(sql_opt,sql_ori->sqlStr,PG_LOGMINER_SQLPARA_SIMSTEP);
 	}
-	freeToastTupleHeadByoid(rrctl.reloid);
+	freeToastTupleHeadByoid(rrctl.reloid, xid);
 	return true;
 }
 
 /*Parser all kinds of update sql, and make decide what sql it will form*/
 static bool
-parserUpdateSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
+parserUpdateSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt, TransactionId xid)
 {
 	char tarTable[NAMEDATALEN] = {0};
 	
@@ -2087,7 +2110,7 @@ parserUpdateSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt)
 		if(sql_ori->sqlStr)
 			appendtoSQL(sql_opt,sql_ori->sqlStr,PG_LOGMINER_SQLPARA_SIMSTEP);
 	}
-	freeToastTupleHeadByoid(rrctl.reloid);
+	freeToastTupleHeadByoid(rrctl.reloid, xid);
 	return true;
 }
 
@@ -2182,17 +2205,18 @@ static void
 XLogMinerRecord_xact(XLogReaderState *record, XLogMinerSQL *sql_simple, TimestampTz *xacttime)
 {
 	uint8						info = XLogRecGetInfo(record) & XLOG_XACT_OPMASK;
-	xl_xact_parsed_commit		parsed_commit;
+	void						*parsed_xact = NULL;
 	char 						timebuf[MAXDATELEN + 1] = {0};
 	TransactionId 				xid = 0;
-	bool						commitxact = false;
 
 	if(info == XLOG_XACT_COMMIT)
 	{
+		xl_xact_parsed_commit		parsed_commit;
 		xl_xact_commit *xlrec = NULL;
 		memset(&parsed_commit, 0, sizeof(xl_xact_parsed_commit));
 		xlrec = (xl_xact_commit *) XLogRecGetData(record);
 		ParseCommitRecord(XLogRecGetInfo(record), xlrec, &parsed_commit);
+		parsed_xact = (void*)&parsed_commit;
 		if (!TransactionIdIsValid(parsed_commit.twophase_xid))
 			xid = XLogRecGetXid(record);
 		else
@@ -2201,7 +2225,6 @@ XLogMinerRecord_xact(XLogReaderState *record, XLogMinerSQL *sql_simple, Timestam
 		memcpy(timebuf,timestamptz_to_str(xlrec->xact_time),MAXDATELEN + 1);
 
 		*xacttime = xlrec->xact_time;
-		commitxact = true;
 	}
 	else if(info == XLOG_XACT_ABORT)
 	{
@@ -2211,6 +2234,7 @@ XLogMinerRecord_xact(XLogReaderState *record, XLogMinerSQL *sql_simple, Timestam
 		memset(&parsed_abort, 0, sizeof(xl_xact_parsed_abort));
 		xlrec = (xl_xact_abort *) XLogRecGetData(record);
 		ParseAbortRecord(XLogRecGetInfo(record), xlrec, &parsed_abort);
+		parsed_xact = (void*)&parsed_abort;
 		if (!TransactionIdIsValid(parsed_abort.twophase_xid))
 			xid = XLogRecGetXid(record);
 		else
@@ -2221,7 +2245,7 @@ XLogMinerRecord_xact(XLogReaderState *record, XLogMinerSQL *sql_simple, Timestam
 	}
 	
 	processContrl(NULL,PG_LOGMINER_CONTRLKIND_XACT);
-	if(curXactCheck(*xacttime, xid, commitxact, &parsed_commit))
+	if(curXactCheck(*xacttime, xid, info, parsed_xact))
 	{
 		xactCommitSQL(timebuf,sql_simple,info);
 	}
@@ -2285,6 +2309,7 @@ sqlParser(XLogReaderState *record, TimestampTz 	*xacttime)
 	bool			getxact = false;
 	bool			getsql = false;
 	Oid				server_dboid = 0;
+	TransactionId	xid = 0;
 	
 
 	cleanSpace(&sql);
@@ -2299,6 +2324,7 @@ sqlParser(XLogReaderState *record, TimestampTz 	*xacttime)
 
 	getPhrases(sql.sqlStr, LOGMINER_SQL_COMMAND, command_sql, 0);
 	sskind = getsqlkind(command_sql);
+	xid = XLogRecGetXid(record);
 
 	if(true)
 	{
@@ -2307,13 +2333,13 @@ sqlParser(XLogReaderState *record, TimestampTz 	*xacttime)
 		switch(sskind)
 		{
 			case PG_LOGMINER_SQLKIND_INSERT:
-				getsql = parserInsertSql(&sql, &sql_reass);
+				getsql = parserInsertSql(&sql, &sql_reass, xid);
 				break;
 			case PG_LOGMINER_SQLKIND_UPDATE:
-				getsql = parserUpdateSql(&sql, &sql_reass);
+				getsql = parserUpdateSql(&sql, &sql_reass, xid);
 				break;
 			case PG_LOGMINER_SQLKIND_DELETE:
-				getsql = parserDeleteSql(&sql, &sql_reass);
+				getsql = parserDeleteSql(&sql, &sql_reass, xid);
 				break;
 			case PG_LOGMINER_SQLKIND_XACT:
 				parserXactSql(&sql, &sql_reass);
@@ -2327,11 +2353,12 @@ sqlParser(XLogReaderState *record, TimestampTz 	*xacttime)
 	if(!isEmptStr(sql_reass.sqlStr) && !getxact)
 	{
 		/*Now, we get a SQL, it need to be store tempory.*/
-		char	*record_schema = NULL;
-		char	*record_database = NULL;
-		char	*record_user = NULL;
-		char	*record_tablespace = NULL;
-		Oid		useroid = 0, schemaoid = 0;
+		char						*record_schema = NULL;
+		char						*record_database = NULL;
+		char						*record_user = NULL;
+		char						*record_tablespace = NULL;
+		XlogminerContentsFirst		*xcf= NULL;
+		Oid							useroid = 0, schemaoid = 0;
 		
 		
 		if(getsql)
@@ -2368,7 +2395,17 @@ sqlParser(XLogReaderState *record, TimestampTz 	*xacttime)
 		padingminerXlogconts(command_sql, 0, Anum_xlogminer_contents_op_type, -1);
 		padingminerXlogconts(NULL,rrctl.recordxid, Anum_xlogminer_contents_xid, -1);
 		
-		srctl.xcfcurnum++;
+		xcf = (XlogminerContentsFirst*)srctl.xcf;
+		/*发生一次插入后，找到srctl.xcf中的下一个空的位置*/
+		while(true)
+		{
+			srctl.xcfcurnum++;
+			Assert(srctl.xcfcurnum <= srctl.xcftotnum);
+			if(!xcf[srctl.xcfcurnum].inuse)
+				break;
+		}
+		if(srctl.xcfmaxnum < srctl.xcfcurnum)
+			srctl.xcfmaxnum = srctl.xcfcurnum;
 		padNullToXC();
 		cleanAnalyseInfo();
 	}

@@ -494,7 +494,7 @@ inputParaCheck(char *st, char *et)
 When it occurs a commit,we must check if we have some sql to insert into temp table.
 */
 bool
-curXactCheck(TimestampTz xact_time ,TransactionId xid, bool xactcommit,xl_xact_parsed_commit *parsed_commit)
+curXactCheck(TimestampTz xact_time ,TransactionId xid, uint8 info,void *parsed_xact)
 {
 	bool	result = true;
 	FormData_xlogminer_contents fxc;
@@ -547,13 +547,16 @@ curXactCheck(TimestampTz xact_time ,TransactionId xid, bool xactcommit,xl_xact_p
 		rrctl.logprivate.staptr_reached = true;
 
 	}
-	else if(!xactcommit)
+	else if(XLOG_XACT_ABORT == info)
 	{
+		xl_xact_parsed_abort *parsed_abort = NULL;
+		parsed_abort = (xl_xact_parsed_abort *)parsed_xact;
 		/*abord xact,do not show the info,then clean the space*/
-		cleanSQLspace();
+		cleanSQLspace(xid, parsed_abort->subxacts, parsed_abort->nsubxacts);
 	}
 	else if(result)
 	{
+		xl_xact_parsed_commit		*parsed_commit = NULL;
 		/*reach the nomal valid(input limit) xlog tuple*/
 		int	 loop = 0;
 		
@@ -563,12 +566,22 @@ curXactCheck(TimestampTz xact_time ,TransactionId xid, bool xactcommit,xl_xact_p
 		fxc.record_schema = NULL;
 		fxc.record_tablespace = NULL;
 		fxc.record_user = NULL;
-		for(loop = 0; loop < srctl.xcfcurnum; loop++)
+
+		parsed_commit = (xl_xact_parsed_commit*)parsed_xact;
+		for(loop = 0; loop < srctl.xcfmaxnum; loop++)
 		{
 			xcf = (XlogminerContentsFirst *)srctl.xcf;
-			if(0 == xcf[loop].xid)
-				fxc.xid = xid;
-			else if(xid != xcf[loop].xid)
+			if(debug_mode)
+			{
+				logminer_elog("[curXactCheck]commit loop = %d", loop);
+			}
+			if(xcf[loop].inuse && 0 == xcf[loop].xid)
+			{
+				//不能到达的代码
+				elog(ERROR, "get a xcf that xid is 0");
+			}
+			
+			else if(!xidMatchXact(xcf[loop].xid, xid, parsed_commit->subxacts, parsed_commit->nsubxacts))
 				continue;
 			
 			fxc.op_text = xcf[loop].op_text.sqlStr;
@@ -583,8 +596,9 @@ curXactCheck(TimestampTz xact_time ,TransactionId xid, bool xactcommit,xl_xact_p
 			fxc.xid = xid;
 			InsertXlogContentsTuple(&fxc);
 		}
-		cleanSQLspace();
-		freeToastTupleHead();
+		cleanSQLspace(xid, parsed_commit->subxacts, parsed_commit->nsubxacts);
+		/*toasttuplehead在每个sql完成的时候就应该释放，不必等到事务commit才释放*/
+		//freeToastTupleHead();
 	}
 	return result;
 }
@@ -628,7 +642,7 @@ padingminerXlogconts(char* elemname, TransactionId xid,int loc, long elemoid)
 	char						tempName[NAMEDATALEN] = {0};
 	char						*appPter = NULL;
 
-	if(srctl.xcfcurnum == srctl.xcftotnum)
+	if(srctl.xcfmaxnum == srctl.xcftotnum)
 			addSQLspace();
 		
 	xcf = (XlogminerContentsFirst*)srctl.xcf;
@@ -652,6 +666,10 @@ padingminerXlogconts(char* elemname, TransactionId xid,int loc, long elemoid)
 	
 	if(Anum_xlogminer_contents_xid == loc)
 	{
+		if(debug_mode)
+		{
+			logminer_elog("[padingminerXlogconts]insert xid:%u", xid);
+		}
 		xcf[srctl.xcfcurnum].xid = xid;
 	}
 	else if(Anum_xlogminer_contents_record_database == loc)
@@ -790,7 +808,7 @@ ifQueNeedDelete(Form_pg_attribute attrs)
 }
 
 ToastTuple*
-makeToastTuple(int datalength,char* data, Oid id, int seq, Oid reloid)
+makeToastTuple(int datalength,char* data, Oid id, int seq, Oid reloid, TransactionId xid)
 {
 	char* ptr = NULL;
 	ToastTuple*	result = NULL;
@@ -802,12 +820,14 @@ makeToastTuple(int datalength,char* data, Oid id, int seq, Oid reloid)
 	result->chunk_seq = seq;
 	result->toastrelid = reloid;
 	result->datalength = datalength;
+	result->xid = xid;
 	result->next = NULL;
 	memcpy(result->chunk_data, data, datalength);
 
 	return result;
 }
 
+/*
 void
 freeToastTupleHead(void)
 {
@@ -822,10 +842,10 @@ freeToastTupleHead(void)
 	}
 	rrctl.tthead = NULL;
 }
-
+*/
 
 void
-freeToastTupleHeadByoid(Oid reloid)
+freeToastTupleHeadByoid(Oid reloid, TransactionId xid)
 {
 	ToastTuple *ttptr = NULL, *ttprev = NULL;
 	bool		needfree = false;
@@ -839,7 +859,7 @@ freeToastTupleHeadByoid(Oid reloid)
 		return;
 	while(ttptr)
 	{
-		if(toastreloid == ttptr->toastrelid)
+		if(toastreloid == ttptr->toastrelid && xid == ttptr->xid)
 		{
 			needfree = true;
 		}

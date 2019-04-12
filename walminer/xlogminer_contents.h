@@ -51,6 +51,6 @@ typedef FormData_xlogminer_contents *Form_xlogminer_contents;
 void InsertXlogContentsTuple(Form_xlogminer_contents fxc);
 void UpdateXlogContentsTuple(Form_xlogminer_contents fxc);
 void addSQLspace(void);
-void cleanSQLspace(void);
+void cleanSQLspace(TransactionId xid, TransactionId* subxids, int nsubxid);
 void freeSQLspace(void);
 #endif

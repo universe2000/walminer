@@ -160,6 +160,7 @@ typedef struct XlogminerContentsFirst{
 	XLogMinerSQL			op_type;
 	XLogMinerSQL			op_text;
 	XLogMinerSQL			op_undo;
+	bool					inuse;
 }XlogminerContentsFirst;
 
 
@@ -202,7 +203,7 @@ void makeXLsql(char* sqlptr, XLsqList** xlsql);
 bool parserPrivChg(char* newsql, char* oldsql, OperaPriv **priv, int *chgnum);
 TupleDesc makeOutputXlogDesc(void);
 bool inputParaCheck(char *st, char *et);
-bool curXactCheck(TimestampTz xact_time ,TransactionId xid, bool xactcommit,xl_xact_parsed_commit *parsed_commit);
+bool curXactCheck(TimestampTz xact_time ,TransactionId xid, uint8 info, void *parsed_xact);
 char* logminer_palloc(int size,int checkflag);
 void logminer_free(char* ptr,int checkflag);
 char* logminer_malloc(int size,int checkflag);
@@ -218,9 +219,9 @@ char* getTuplemSpace(int addsize);
 void cleanTuplemSpace(char* tuplem);
 bool ifquoneed(Form_pg_attribute attrs);
 char* OutputToByte(text* attrpter, int attlen);
-ToastTuple* makeToastTuple(int datalength,char* data, Oid id, int seq, Oid reloid);
-void freeToastTupleHead(void);
-void freeToastTupleHeadByoid(Oid reloid);
+ToastTuple* makeToastTuple(int datalength,char* data, Oid id, int seq, Oid reloid, TransactionId xid);
+//void freeToastTupleHead(void);
+void freeToastTupleHeadByoid(Oid reloid, TransactionId xid);
 void toastTupleAddToList(ToastTuple *tt);
 text* cstringToTextWithLen(const char *s, int len);
 bool getTypeOutputFuncFromDb(Oid type, Oid *typOutput, bool *typIsVarlena);
