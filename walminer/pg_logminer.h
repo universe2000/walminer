@@ -157,6 +157,7 @@ typedef struct ToastTuple
 	char	*chunk_data;
 	int		datalength;
 	Oid		toastrelid;
+	TransactionId	xid;
 	struct ToastTuple* next;
 }ToastTuple;
 
@@ -363,6 +364,7 @@ typedef struct SQLRecycleCtl
 	/*For store sqls in a xact*/
 	char			*xcf;
 	int				xcftotnum;
+	int				xcfmaxnum;
 	int				xcfcurnum;
 	
 	bool			getanysql;
@@ -404,5 +406,6 @@ void appendBlanktoSQL(XLogMinerSQL *sql_simple);
 
 void outTempleResult(char *str);
 void outVar(void *var, int kind);
-
+void logminer_elog(const char *fmt,...);
+bool xidMatchXact(TransactionId curxid,TransactionId xidxact, TransactionId* subxids, int nsubxid);
 #endif
