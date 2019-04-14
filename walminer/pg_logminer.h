@@ -258,6 +258,10 @@ typedef struct RecordRecycleCtl
 
 	bool				hasunanalysetuple;
 	int					countCheckpoint;
+	/*单表解析相关参数*/
+	Oid					simreloid;
+	Oid					simrelrelfilenode;
+	bool				simana;
 	int					WalSegSz;
 }RecordRecycleCtl;
 

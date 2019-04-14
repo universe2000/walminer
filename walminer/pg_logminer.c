@@ -90,7 +90,7 @@ static SQLKind sqlkind[] = {
 
 PG_MODULE_MAGIC;
 
-static bool getNextRecord();
+static bool getNextRecord(bool *ifanalyse);
 static bool sqlParser(XLogReaderState *record, TimestampTz 	*xacttime);
 static bool getBlockImage(XLogReaderState *record, uint8 block_id, char *page);
 static bool getImageFromStore(RelFileNode *rnode, ForkNumber forknum, BlockNumber blkno, char* page, int *index);
@@ -1663,6 +1663,22 @@ getTupleInfoByRecord(XLogReaderState *record, uint8 info, NameData* relname,char
 	rrctl.imprel = tableifImpSysclass(relname->data,reloid);
 	rrctl.toastrel = tableIftoastrel(reloid);
 	rrctl.recordxid = XLogRecGetXid(record);
+	
+	/*单表解析代码*/
+	if(rrctl.simana)
+	{
+		if(reloid != rrctl.simreloid )
+		{
+			Oid			toastreloftarrel = 0;
+			/*不是目标表，也不是toast表*/
+			if(!rrctl.toastrel)
+				return false;
+			/*不是目标表的toast表*/
+			toastreloftarrel = gettoastRelidByReloid(rrctl.simreloid);
+			if(toastreloftarrel != reloid)
+				return false;
+		}
+	}
 	if(rrctl.nomalrel)
 	{
 		rrctl.tbsoid = node->spcNode;
@@ -2026,11 +2042,68 @@ minerHeap2MutiInsert(XLogReaderState *record, XLogMinerSQL *sql_simple, uint8 in
 
 /*find next xlog record and store into rrctl.xlogreader_state*/
 static bool 
-getNextRecord()
+getNextRecord(bool *ifanalyse)
 {
-	XLogRecord *record_t;	
+	XLogRecord 		*record_t = NULL;
+	XLogReaderState	*record = NULL;
+	bool			validrecord = true;
+	uint8			rmid = 0;
+
+	
 	record_t = XLogReadRecord_logminer(rrctl.xlogreader_state, rrctl.first_record, &rrctl.errormsg);
-	recordStoreImage(rrctl.xlogreader_state);
+	/*单表解析代码*/
+	
+	record = rrctl.xlogreader_state;
+	rmid = XLogRecGetRmid(record);
+
+	*ifanalyse = true;
+	if(RM_XACT_ID == rmid || RM_XLOG_ID == rmid || !record_t)
+	{
+		logminer_elog("donothing");
+		//donothing. 此处代码是为了永远处理事务相关的记录
+	}
+	else if(rrctl.simana)
+	{
+		RelFileNode	recordNode;
+		uint32		blknum = 0;
+		Oid			recordReloid = 0;
+		
+
+		memset(&recordNode, 0, sizeof(RelFileNode));
+		if(!XLogRecGetBlockTag(record, 0, &recordNode, NULL, &blknum))
+		{
+			logminer_elog("aaaa");
+			validrecord = false;
+		}
+		else
+		{
+			recordReloid = getRelationOidByRelfileid(recordNode.relNode);
+			logminer_elog("relNode=%u, recordReloid=%u", recordNode.relNode, recordReloid);
+			logminer_elog("simrelrelfilenode=%u, simreloid=%u", rrctl.simrelrelfilenode, rrctl.simreloid);
+			if(0 == recordReloid)
+			/*如果recordReloid=0，那么此record表为系统表,则不处理这个record*/
+				validrecord = false;
+			if(validrecord && recordNode.relNode != rrctl.simrelrelfilenode)
+			{
+				Oid			toastreloftarrel = 0;
+				/*不是目标表，也不是toast表*/
+				if(!tableIftoastrel(recordReloid))
+					validrecord =  false;
+				
+				/*不是目标表的toast表*/
+				toastreloftarrel = gettoastRelidByReloid(rrctl.simreloid);
+				logminer_elog("toastreloftarrel=%u, recordReloid=%u", toastreloftarrel, recordReloid);
+				if(toastreloftarrel != recordReloid)
+					validrecord =  false;
+			}
+		}
+		*ifanalyse = validrecord;
+	}
+
+	if(validrecord)
+	{
+		recordStoreImage(rrctl.xlogreader_state);
+	}
 	rrctl.first_record = InvalidXLogRecPtr;
 	rrctl.recyclecount++;
 	if (!record_t)
@@ -2594,6 +2667,7 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 	char					*firstxlogfile = NULL;
 	int						dicloadtype = 0;
 	char					dictionary[MAXPGPATH] = {0};
+	Oid						tarreloid = 0;
 
 	memset(&rrctl, 0, sizeof(RecordRecycleCtl));
 	memset(&sysclass, 0, sizeof(SystemClass)*PG_LOGMINER_SYSCLASS_MAX);
@@ -2616,6 +2690,7 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 	startxid = PG_GETARG_INT32(2);
 	endxid = PG_GETARG_INT32(3);
 	tempresultout = PG_GETARG_BOOL(4);
+	tarreloid = PG_GETARG_OID(5);
 	if(0 > startxid || 0 > endxid)
 		ereport(ERROR,(errmsg("The XID parameters cannot be negative.")));
 
@@ -2654,7 +2729,21 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 	searchSysClass(sysclass,&sysclassNum);
 	relkind_miner = getRelKindInfo();
 
-	
+	if(0 != tarreloid)
+	{
+		int checkreloid = 0;
+		NameData	tarrelname;
+
+		memset(&tarrelname, 0, sizeof(NameData));
+		checkreloid =getRelationNameByOid(tarreloid, &tarrelname);
+		if(FirstNormalObjectId > tarreloid)
+			elog(ERROR, "can not support catalog relation simple analyse.");
+		if(1 != checkreloid)
+			elog(ERROR, "can not find table with reloid \'%u\' in datadictionary", tarreloid);
+		rrctl.simana = true;
+		rrctl.simreloid = tarreloid;
+		rrctl.simrelrelfilenode = getByRelfileidByRelationOid(tarreloid);
+	}
 	firstxlogfile = getNextXlogFile((char*)(&rrctl.lfctx),false);
 	rrctl.lfctx.xlogfileptr = NULL;
 	split_path_fname(firstxlogfile, &directory, &fname);
@@ -2684,7 +2773,11 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 		/*if in a mutiinsert now, avoid to get new record*/
 		if(!srctl.mutinsert)
 		{
-			getrecord = getNextRecord();
+			bool ifananlyse = false;
+			while(!ifananlyse)
+			{
+				getrecord = getNextRecord(&ifananlyse);
+			}
 		}
 		if(getrecord)
 			sqlParser(rrctl.xlogreader_state, &xacttime);

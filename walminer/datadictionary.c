@@ -1946,6 +1946,34 @@ getRelationOidByRelfileid(Oid relNodeid)
 	return result;
 }
 
+Oid
+getByRelfileidByRelationOid(Oid reloid)
+{
+	PgDataDic 			*pdd = NULL;
+	Form_pg_class		fpc = NULL;
+	char 				*serchPtr = NULL;
+	Oid					result = 0;
+	int					*oidPtr = NULL;
+	SysClassLevel 		*scl = NULL;
+	Oid					search_tabid = PG_LOGMINER_IMPTSYSCLASS_PGCLASS;
+
+	scl = getImportantSysClass();
+	
+	pdd = (PgDataDic *)DataDictionaryCache;
+
+	while(NULL != (serchPtr = logminer_getnext(search_tabid ,scl)))
+	{
+		fpc = (Form_pg_class)(serchPtr + sizeof(Oid));
+		oidPtr = (int *)serchPtr;
+		if(reloid == *oidPtr)
+		{
+			result = fpc->relfilenode;
+			break;
+		}
+	}
+	pdd->sdc[search_tabid].curdata = pdd->sdc[search_tabid].data;
+	return result;
+}
 
 
 bool
