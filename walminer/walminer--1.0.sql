@@ -1,5 +1,5 @@
 /* contrib/xlogminer/xlogminer--1.0.sql */
-CREATE OR REPLACE FUNCTION pg_minerwal(starttime text, endtime text, startxid int, endxid int, tempresult bool)
+CREATE OR REPLACE FUNCTION pg_minerwal(starttime text, endtime text, startxid int, endxid int, tempresult bool, reloid  Oid)
 RETURNS text AS
 'MODULE_PATHNAME','pg_minerXlog'
 LANGUAGE C CALLED ON NULL INPUT;
@@ -30,10 +30,17 @@ CREATE OR REPLACE FUNCTION walminer_start(starttime text, endtime text, startxid
 RETURNS text AS 
 $BODY$
 	select walminer_temp_table_check();
-	select pg_minerwal($1,$2,$3,$4,$5);
+	select pg_minerwal($1,$2,$3,$4,$5,0);
 $BODY$
 LANGUAGE 'sql';
 
+CREATE OR REPLACE FUNCTION walminer_start_simpletable(reloid Oid,tempresult bool DEFAULT 'false')
+RETURNS text AS 
+$BODY$
+	select walminer_temp_table_check();
+	select pg_minerwal('NULL', 'NULL', 0, 0, $2, $1);
+$BODY$
+LANGUAGE 'sql';
 
 CREATE OR REPLACE FUNCTION walminer_build_dictionary(in path text)
 RETURNS text AS

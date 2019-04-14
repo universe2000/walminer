@@ -128,6 +128,7 @@ char* getnsNameByReloid(Oid reloid);
 bool getLangNameByOid(Oid langoid, NameData* langname);
 bool getTypnameBytypid(Oid typid, char* typname);
 Oid getRelationOidByRelfileid(Oid relNodeid);
+Oid getByRelfileidByRelationOid(Oid reloid);
 bool getRelAttNameByReloidAttid(Oid attoid, int attid, char* attname);
 void freetupdesc(TupleDesc tupdesc);
 bool is_xlogfilelist_exist(void);
