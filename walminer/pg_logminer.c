@@ -1988,13 +1988,23 @@ getNextRecord(bool *ifanalyse)
 	/*单表解析代码*/
 	
 	record = rrctl.xlogreader_state;
-	rmid = XLogRecGetRmid(record);
-
+	if(record_t)
+		rmid = XLogRecGetRmid(record);
+	else
+		rmid = 0;
 	*ifanalyse = true;
 	if(RM_XACT_ID == rmid || RM_XLOG_ID == rmid || !record_t)
 	{
-		logminer_elog("donothing");
+		//logminer_elog("donothing");
 		//donothing. 此处代码是为了永远处理事务相关的记录
+		;
+	}
+	/*不处理索引记录*/
+	else if(RM_BTREE_ID == rmid || RM_HASH_ID == rmid || RM_GIN_ID == rmid
+			|| RM_GIST_ID == rmid || RM_BRIN_ID == rmid || RM_SPGIST_ID == rmid)
+	{
+		validrecord = false;
+		*ifanalyse = validrecord;
 	}
 	else if(rrctl.simana)
 	{
@@ -2006,14 +2016,13 @@ getNextRecord(bool *ifanalyse)
 		memset(&recordNode, 0, sizeof(RelFileNode));
 		if(!XLogRecGetBlockTag(record, 0, &recordNode, NULL, &blknum))
 		{
-			logminer_elog("aaaa");
 			validrecord = false;
 		}
 		else
 		{
 			recordReloid = getRelationOidByRelfileid(recordNode.relNode);
-			logminer_elog("relNode=%u, recordReloid=%u", recordNode.relNode, recordReloid);
-			logminer_elog("simrelrelfilenode=%u, simreloid=%u", rrctl.simrelrelfilenode, rrctl.simreloid);
+			//logminer_elog("relNode=%u, recordReloid=%u", recordNode.relNode, recordReloid);
+			//logminer_elog("simrelrelfilenode=%u, simreloid=%u", rrctl.simrelrelfilenode, rrctl.simreloid);
 			if(0 == recordReloid)
 			/*如果recordReloid=0，那么此record表为系统表,则不处理这个record*/
 				validrecord = false;
@@ -2026,7 +2035,7 @@ getNextRecord(bool *ifanalyse)
 				
 				/*不是目标表的toast表*/
 				toastreloftarrel = gettoastRelidByReloid(rrctl.simreloid);
-				logminer_elog("toastreloftarrel=%u, recordReloid=%u", toastreloftarrel, recordReloid);
+				//logminer_elog("toastreloftarrel=%u, recordReloid=%u", toastreloftarrel, recordReloid);
 				if(toastreloftarrel != recordReloid)
 					validrecord =  false;
 			}
