@@ -251,7 +251,7 @@ void
 appendtoSQL(XLogMinerSQL *sql_simple, char *sqlpara , int spaceKind)
 {
 
-	int addsize;
+	int addsize = 0;
 
 	if(PG_LOGMINER_SQLPARA_OTHER != spaceKind && PG_LOGMINER_XLOG_DBINIT == rrctl.system_init_record)
 		return;
@@ -2417,7 +2417,7 @@ sqlParser(XLogReaderState *record, TimestampTz 	*xacttime)
 		{
 			srctl.xcfcurnum++;
 			Assert(srctl.xcfcurnum <= srctl.xcftotnum);
-			if(!xcf[srctl.xcfcurnum].inuse)
+			if(srctl.xcfcurnum == srctl.xcftotnum || !xcf[srctl.xcfcurnum].inuse)
 				break;
 		}
 		if(srctl.xcfmaxnum < srctl.xcfcurnum)
