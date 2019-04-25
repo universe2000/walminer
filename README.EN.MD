@@ -1,9 +1,9 @@
-XLogMiner
+WalMiner
 =====
 an Open-Source SQL miner on PostgreSQL WAL log
 
-# What is XLogMiner
-XLogMiner is used for parsing the SQL statement out from the PostgreSQL WAL (write ahead logs) logs, and it can also generate the corresponding "undo SQL".
+# What is WalMiner
+WalMiner is used for parsing the SQL statement out from the PostgreSQL WAL (write ahead logs) logs, and it can also generate the corresponding "undo SQL".
 
 # Configuration requirements
 Need to configure the database log level to be larger than minimal.
@@ -15,8 +15,8 @@ Need to configure the database log level to be larger than minimal.
 - If you find problems during use, please feel free to give us feedback.
 
 # Compile and install
-1. Copy the xlogminer directory into the "../contrib/" directory of the PostgreSQL source code location
-2. Enter "contrib/xlogminer" directory
+1. Copy the walminer directory into the "../contrib/" directory of the PostgreSQL source code location
+2. Enter "contrib/walminer" directory
 3. Execute commands
 ```shell
 make && make install
@@ -24,41 +24,41 @@ make && make install
 
 # User Guide
 ## Scenario I: Execute the parsing in the owner database of the WAL files
-### 1. Create extension xlogminer
+### 1. Create extension walminer
 ```sql
-create extension xlogminer;
+create extension walminer;
 ```
 
 ### 2. Add target WAL files
 ```sql
 -- Add WAL file or directory
-select xlogminer_xlogfile_add('/opt/test/wal');
+select walminer_wal_add('/opt/test/wal');
 -- Note: the parameter can be file name or directory name.
 ```
 
 ### 3. Remove WAL files
 ```sql
 -- remove WAL file or directory
-select xlogminer_xlogfile_remove('/opt/test/wal');
+select walminer_wal_remove('/opt/test/wal');
 -- Note: the parameter can be file name or directory name.
 ```
 
 ### 4. List WAL files
 ```sql
 -- List WAL files
-select xlogminer_xlogfile_list();
+select walminer_wal_list();
 ```
 
-### 5. Execute the xlogminer
+### 5. Execute the walminer
 ```sql
-select xlogminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’);
+select walminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’)
 -- Run below sql to parse all the WAL logs
-select xlogminer_start('null','null',0,0);
+select walminer_start('null','null',0,0);
 -- Run below will analyse the system table record and store in '$PGDATA/walminer/temp'
-select xlogminer_start('null','null',0,0,true);
+select walminer_start('null','null',0,0,true);
 ```
-* **START_TIMESTAMP**：Specify the start time condition of the records in the return results, the xlogminer will start parsing from this time value. If this value is NULL, the earlist records will be displayed from the WAL lists. If this time value is not included in the xlog lists, a.k.a all the records are ealier then this value, the NULL will be returned.
-* **STOP_TIMESTAMP**：Specify the ending time condition of the records in the results, the xlogminer will stop parsing when the result is later than this time. If this parameter is NULL, then all the records after **START_TIMESTAMP** will parsed and displyed in the WAL logs.
+* **START_TIMESTAMP**：Specify the start time condition of the records in the return results, the walminer will start parsing from this time value. If this value is NULL, the earlist records will be displayed from the WAL lists. If this time value is not included in the xlog lists, a.k.a all the records are ealier then this value, the NULL will be returned.
+* **STOP_TIMESTAMP**：Specify the ending time condition of the records in the results, the walminer will stop parsing when the result is later than this time. If this parameter is NULL, then all the records after **START_TIMESTAMP** will parsed and displyed in the WAL logs.
 * **START_XID**：Similiar with **START_TIMESTAMP**, specify the starting **XID** value
 * **STOP_XID**：Similiar with **STOP_TIMESTAMP**，specify the ending **XID** value	
 
@@ -66,13 +66,13 @@ select xlogminer_start('null','null',0,0,true);
 	
 ### 6. Check the parsing result
 ```sql
-select * from xlogminer_contents;
+select * from walminer_contents;
 ```
 
-### 7. Stop the xlogminer
+### 7. Stop the walminer
 This function is used to free the memory and stop the WAL parsing. No parameters available.
 ```sql
-select xlogminer_stop();
+select walminer_stop();
 ```
 
 
@@ -81,27 +81,27 @@ select xlogminer_stop();
 
 ### On production database
 
-#### 1. Create xlogminer extension
+#### 1.创建walminer的extension
 ```sql
-create extension xlogminer;
+create extension walminer;
 ```
 
 #### 2. Build the dictionary
 ```sql
-select xlogminer_build_dictionary('/opt/proc/store_dictionary');
+select walminer_build_dictionary('/opt/proc/store_dictionary');
 -- Note: the parameter can be file name or directory name.
 ```
 
 ### On testing database
 
-#### 1. Create xlogminer extension
+#### 1. 创建walminer的extension
 ```sql
-create extension xlogminer;
+create extension walminer;
 ```
 
 #### 2. Load database dictionary
 ```sql
-select xlogminer_load_dictionary('/opt/test/store_dictionary');
+select walminer_load_dictionary('/opt/test/store_dictionary');
 -- Note: the parameter can be file name or directory name.
 ```
 :bulb:	the parameter can be file name or directory name.
@@ -109,49 +109,49 @@ select xlogminer_load_dictionary('/opt/test/store_dictionary');
 #### 3. Add WAL files
 ```sql
 -- Add WAL files
-select xlogminer_xlogfile_add('/opt/test/wal');
+select walminer_wal_add('/opt/test/wal');
 -- Note: the parameter can be file name or directory name.
 ```
 
 #### 4. remove xlog WAL files
 ```sql
 -- Remove WAL files
-select xlogminer_xlogfile_remove('/opt/test/wal');
+select walminer_wal_remove('/opt/test/wal');
 -- Note:the parameter can be file name or directory name.
 ```
 
 #### 5. List xlog WAL files	
 ```sql
 -- list WAL files
-select xlogminer_xlogfile_list();
+select walminer_wal_list();
 -- Note:the parameter can be file name or directory name.
 ```
 
 #### 6. Execute the parsing
 ```sql
-select xlogminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’)
+select walminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’)
 ```
 
-* **START_TIMESTAMP**：Specify the start time condition of the records in the return results, the xlogminer will start parsing from this time value. If this value is NULL, the earlist records will be displayed from the WAL lists. If this time value is not included in the xlog lists, a.k.a all the records are ealier then this value, the NULL will be returned.
-* **STOP_TIMESTAMP**：Specify the ending time condition of the records in the results, the xlogminer will stop parsing when the result is later than this time. If this parameter is NULL, then all the records after **START_TIMESTAMP** will parsed and displyed in the WAL logs.
+* **START_TIMESTAMP**：Specify the start time condition of the records in the return results, the walminer will start parsing from this time value. If this value is NULL, the earlist records will be displayed from the WAL lists. If this time value is not included in the xlog lists, a.k.a all the records are ealier then this value, the NULL will be returned.
+* **STOP_TIMESTAMP**：Specify the ending time condition of the records in the results, the walminer will stop parsing when the result is later than this time. If this parameter is NULL, then all the records after **START_TIMESTAMP** will parsed and displyed in the WAL logs.
 * **START_XID**：Similiar with **START_TIMESTAMP**, specify the starting **XID** value
 * **STOP_XID**：Similiar with **STOP_TIMESTAMP**，specify the ending **XID** value	
 
 #### 7. Check the parsing result
 ```sql
-select * from xlogminer_contents;
+select * from walminer_contents;
 ```
 
-### 8.Stop the xlogminer
+### 8.Stop the walminer
 This function is used to free the memory and stop the WAL parsing. No parameters available.
 ```sql
-select xlogminer_stop();
+select walminer_stop();
 ```
 
-:warning: **NOTE**：For the security considerations, xlogminer_contents is a temporary table generated by xlogminer automatically, it is not visible when session disconnected and then re-connect, and it is also not visible to other sessions. 
+:warning: **NOTE**：For the security considerations, walminer_contents is a temporary table generated by walminer automatically, it is not visible when session disconnected and then re-connect, and it is also not visible to other sessions. 
      If you want to keep the paring result, you can use the below SQL to write the results into a regular table.
 ```sql	 
-create xxx as select * from  xlogminer_contents;
+create xxx as select * from  walminer_contents;
 ```
 
 # Limitations
