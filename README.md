@@ -147,8 +147,8 @@ select * from walminer_contents;
 select walminer_stop();
 ```
 
-:warning: **注意**：walminer_contents是xlogminer自动生成的临时表，因此当session断开再重新进入或其他session中解析数据不可见。这么做主要是基于安全考虑。
-      如果希望保留解析结果，可利用create xxx as select * from  xlogminer_contents;写入普通表中。
+:warning: **注意**：walminer_contents是walminer自动生成的临时表，因此当session断开再重新进入或其他session中解析数据不可见。这么做主要是基于安全考虑。
+      如果希望保留解析结果，可利用create xxx as select * from  walminer_contents;写入普通表中。
 
 # 使用限制
 1. 本版本只解析DML语句，不处理DDL语句
