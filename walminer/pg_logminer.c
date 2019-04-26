@@ -1591,7 +1591,7 @@ getTupleInfoByRecord(XLogReaderState *record, uint8 info, NameData* relname,char
 	
 	if(-1 == getRelationNameByOid(reloid, relname))
 		return false;
-	if(0 == strcmp("pg_statistic", relname))
+	if(0 == strcmp("pg_statistic", relname->data))
 		return false;
 	*schname = getnsNameByReloid(reloid);
 	rrctl.sysrel = tableIfSysclass(relname->data,reloid);
