@@ -48,7 +48,7 @@ select walminer_wal_list();
 
 ### 5. 执行解析
 ```sql
-select walminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’)
+select walminer_start('START_TIMSTAMP','STOP_TIMESTAMP','START_XID','STOP_XID')
 ---如果分析全部日志：
 select walminer_start('null','null',0,0);
 ---将系统表修改结果输出到$PGDATA/walminer/temp下：
@@ -129,7 +129,7 @@ select walminer_wal_list();
 	
 #### 6. 执行解析
 ```sql
-select walminer_start(’START_TIMSTAMP’,’STOP_TIMESTAMP’,’START_XID’,’STOP_XID’)
+select walminer_start('START_TIMSTAMP','STOP_TIMESTAMP','START_XID','STOP_XID')
 ```
 * **START_TIMESTAMP**：指定输出结果中最早的记录条目，即从该时间开始输出分析数据；若该参数值为空，则以分析日志列表中最早数据开始输出；若该参数值指定时间没有包含在所分析xlog列表中，即通过分析发现全部早于该参数指定时间，则返回空值。	
 * **STOP_TIMESTAMP**：指定数据结果中最晚的记录条目，即输出结果如果大于该时间，则停止分析，不需要继续输出；如果该参数值为空，则从START_TIMESTAMP开始的所有日志都进行分析和输出。	

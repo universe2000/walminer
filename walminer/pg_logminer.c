@@ -113,6 +113,8 @@ static void heap_page_prune_execute_logminer(Page page,
 						OffsetNumber *nowunused, int nunused);
 static void closeTempleResult(void);
 
+static FILE *globalFp = NULL;
+
 
 /*
 PG_FUNCTION_INFO_V1(pg_xlog2sql);
@@ -125,6 +127,35 @@ PG_FUNCTION_INFO_V1(xlogminer_xlogfile_list);
 PG_FUNCTION_INFO_V1(xlogminer_xlogfile_remove);
 PG_FUNCTION_INFO_V1(pg_minerXlog);
 
+static void 
+OpenFileName()
+{
+	char	storefile[MAXPGPATH] = {0};
+
+	sprintf(storefile,"%s/%s", PG_LOGMINER_PATH, PG_LOGMINER_STOREIMAGE_FILENAME);
+
+	if(!create_dir(PG_LOGMINER_PATH))
+	{
+		elog(ERROR,"fail to create dir walminer under %s", DataDir);
+	}
+
+	globalFp = fopen(storefile, "rb+");
+
+	if(!globalFp)
+	{
+		elog(ERROR,"fail to open file %s to write", storefile);
+	}	
+
+}
+
+static void 
+CloseFileName()
+{
+
+	fclose(globalFp);
+	globalFp = NULL;
+
+}
 
 SysClassLevel *getImportantSysClass(void)
 {
@@ -517,39 +548,22 @@ getImageFromStore(RelFileNode *rnode, ForkNumber forknum, BlockNumber blkno, cha
 static void
 flushPage(int index, char* page)
 {
-	char	storefile[MAXPGPATH] = {0};
-	char	*path = PG_LOGMINER_PATH;
-	char	*filename = PG_LOGMINER_STOREIMAGE_FILENAME;
-	FILE	*fp = NULL;
 	int64	seeksize = 0;
 
 	Assert(page);
-	sprintf(storefile,"%s/%s", path, filename);
-	if(!create_dir(path))
-	{
-		elog(ERROR,"fail to create dir walminer under %s", DataDir);
-	}
-
-	fp = fopen(storefile, "rb+");
-	if(!fp)
-	{
-		elog(ERROR,"fail to open file %s to write", storefile);
-	}	
-	fseek(fp, 0, SEEK_SET);
-	Assert(0 == ftell(fp));
+	fseek(globalFp, 0, SEEK_SET);
+	Assert(0 == ftell(globalFp));
 	Assert(0 <= index);
 	if(0 != index)
 	{
 		seeksize = (int64)index * BLCKSZ;
-		fseek(fp, seeksize, SEEK_SET);
-		
+		fseek(globalFp, seeksize, SEEK_SET);
 	}
-	if(BLCKSZ != fwrite(page, 1, BLCKSZ, fp))
+	if(BLCKSZ != fwrite(page, 1, BLCKSZ, globalFp))
 	{
-		elog(ERROR,"fail to write to %s", storefile);
+		elog(ERROR,"fail to write to %s/%s", PG_LOGMINER_PATH, PG_LOGMINER_STOREIMAGE_FILENAME);
 	}
-	fclose(fp);
-	fp = NULL;
+
 }
 
 static void
@@ -564,7 +578,7 @@ cleanStorefile(void)
 	fp = fopen(storefile, "wb");
 	if(!fp)
 	{
-		elog(ERROR,"fail to clean file %s", storefile);
+		elog(ERROR,"fail to clean file %s/%s", PG_LOGMINER_PATH, PG_LOGMINER_STOREIMAGE_FILENAME);
 	}
 	fclose(fp);
 	fp = NULL;
@@ -574,34 +588,23 @@ cleanStorefile(void)
 static void
 readPage(int index, char* page)
 {
-	char	storefile[MAXPGPATH] = {0};
-	char	*path = PG_LOGMINER_PATH;
-	char	*filename = PG_LOGMINER_STOREIMAGE_FILENAME;
-	FILE	*fp = NULL;
 	int64	seeksize = 0;
 	Assert(page);
-	sprintf(storefile,"%s/%s", path, filename);
 
-	fp = fopen(storefile, "rb");
-	if(!fp)
-	{
-		elog(ERROR,"fail to open file %s to read", storefile);
-	}
-	fseek(fp, 0, SEEK_SET);
-	Assert(0 == ftell(fp));
+	fseek(globalFp, 0, SEEK_SET); 
+	Assert(0 == ftell(globalFp));
 	Assert(0 <= index);
+
 	if(0 != index)
 	{
 		seeksize = (int64)index * BLCKSZ;
-		fseek(fp, seeksize, SEEK_SET);
+		fseek(globalFp, seeksize, SEEK_SET);
 	}
-	if(BLCKSZ != fread(page, 1, BLCKSZ, fp))
+	if(BLCKSZ != fread(page, 1, BLCKSZ, globalFp))
 	{
-		elog(ERROR,"fail to read %s", storefile);
+		elog(ERROR,"fail to read %s/%s", PG_LOGMINER_PATH, PG_LOGMINER_STOREIMAGE_FILENAME);
 	}
 
-	fclose(fp);
-	fp = NULL;
 }
 
 static void
@@ -2618,6 +2621,9 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 	memset(&sql_reass, 0, sizeof(XLogMinerSQL));
 	memset(&sql, 0, sizeof(XLogMinerSQL));
 
+	cleanStorefile(); //rocky_
+    OpenFileName(); //rocky_
+
 	sqlnoser = 0;
 	cleanSystableDictionary();
 	checkLogminerUser();
@@ -2704,7 +2710,6 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 		rrctl.system_init_record = PG_LOGMINER_XLOG_NOMAL;
 		rrctl.sysstoplocation = PG_LOGMINER_FLAG_INITOVER;
 	}
-	cleanStorefile();
 	/*configure call back func*/
 	rrctl.xlogreader_state = XLogReaderAllocate(XLogMinerReadPage, &rrctl.logprivate);
 	XLogSegNoOffsetToRecPtr(segno, 0, rrctl.logprivate.startptr);
@@ -2740,7 +2745,6 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 	XLogReaderFree(rrctl.xlogreader_state);
 	pfree(rrctl.tuplem);
 	pfree(rrctl.tuplem_old);
-	cleanStorefile();
 	closeTempleResult();
 	if(rrctl.imagelist)
 		list_free(rrctl.imagelist);
@@ -2749,4 +2753,7 @@ Datum pg_minerXlog(PG_FUNCTION_ARGS)
 		PG_RETURN_TEXT_P(cstring_to_text("walminer sucessful with some tuple missed!"));
 	else
 		PG_RETURN_TEXT_P(cstring_to_text("walminer sucessful!"));
+
+    CloseFileName(); //rocky
+	cleanStorefile(); //rocky_
 }

@@ -1288,6 +1288,11 @@ loadSystableDictionary(char *path, SysClassLevel *scl, bool self)
 		ereport(ERROR,(errmsg("File or directory \"%s\" access is denied or does not exists.",dictionary_path)));
 	}
 	
+
+	snprintf(temp_path, MAXPGPATH, "%s/%s",DataDir, PG_LOGMINER_PATH); //rocky_
+    if(!is_dir_exist(temp_path))
+	    create_dir(temp_path);
+
 	memset(temp_path,0,MAXPGPATH);
 	snprintf(temp_path, MAXPGPATH, "%s/%s/temp",DataDir, PG_LOGMINER_PATH);
 	if(!create_dir(temp_path))
