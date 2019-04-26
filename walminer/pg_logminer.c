@@ -1591,6 +1591,8 @@ getTupleInfoByRecord(XLogReaderState *record, uint8 info, NameData* relname,char
 	
 	if(-1 == getRelationNameByOid(reloid, relname))
 		return false;
+	if(0 == strcmp("pg_statistic", relname->data))
+		return false;
 	*schname = getnsNameByReloid(reloid);
 	rrctl.sysrel = tableIfSysclass(relname->data,reloid);
 	rrctl.nomalrel = (!rrctl.sysrel) && (!tableIftoastrel(reloid));
@@ -2104,6 +2106,11 @@ parserDeleteSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt, TransactionId xid)
 	{
 		if(0 == rrctl.prostatu)
 			reAssembleDeleteSql(sql_ori, false);
+		else
+		{
+			if(tempresultout)
+				logminer_elog("parserDeleteSql:rrctl.prostatu=%d",rrctl.prostatu);
+		}
 		appendtoSQL(sql_opt,sql_ori->sqlStr,PG_LOGMINER_SQLPARA_SIMSTEP);
 	}
 	freeToastTupleHeadByoid(rrctl.reloid, xid);
@@ -2123,6 +2130,11 @@ parserUpdateSql(XLogMinerSQL *sql_ori, XLogMinerSQL *sql_opt, TransactionId xid)
 	{
 		if(0 == rrctl.prostatu)
 			reAssembleUpdateSql(sql_ori, false);
+		else
+		{
+			if(tempresultout)
+				logminer_elog("parserUpdateSql:rrctl.prostatu=%d",rrctl.prostatu);
+		}
 		if(sql_ori->sqlStr)
 			appendtoSQL(sql_opt,sql_ori->sqlStr,PG_LOGMINER_SQLPARA_SIMSTEP);
 	}
