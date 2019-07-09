@@ -22,7 +22,9 @@
 #include "miscadmin.h"
 #include "utils/memutils.h"
 #include "xlogminer_contents.h"
-
+#ifdef PG_VERSION_12
+#include "access/table.h"
+#endif
 
 #define XLogRecGetData_Logminer(record)	((char*) (record) + SizeOfXLogRecord)
 

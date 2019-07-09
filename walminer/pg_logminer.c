@@ -177,8 +177,9 @@ getWalSegSz(char* path)
 	}
 	else
 	{
-		if (errno != 0)
-			elog(ERROR,"could not read file \"%s\": %s", path, strerror(errno));
+		int err = errno;
+		if (err != 0)
+			elog(ERROR,"could not read file \"%s\": %s", path, strerror(err));
 		else
 			elog(ERROR,"not enough data in file \"%s\"", path);
 	}
@@ -840,8 +841,13 @@ getBlockImage(XLogReaderState *record, uint8 block_id, char *page)
 	if (bkpb->bimg_info & BKPIMAGE_IS_COMPRESSED)
 	{
 		/* If a backup block image is compressed, decompress it */
+#ifdef PG_VERSION_12
+		if (pglz_decompress(ptr, bkpb->bimg_len, tmp,
+							BLCKSZ - bkpb->hole_length,true) < 0)
+#else
 		if (pglz_decompress(ptr, bkpb->bimg_len, tmp,
 							BLCKSZ - bkpb->hole_length) < 0)
+#endif
 		{
 			elog(LOG, "invalid compressed image at %X/%X, block %d",
 								  (uint32) (record->ReadRecPtr >> 32),
