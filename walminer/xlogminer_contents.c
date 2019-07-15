@@ -11,6 +11,9 @@
 #include "utils/builtins.h"
 #include "catalog/indexing.h"
 #include "datadictionary.h"
+#ifdef PG_VERSION_12
+#include "access/heapam.h"
+#endif
 
 static int64 countSQLspace(void);
 
@@ -237,8 +240,11 @@ InsertXlogContentsTuple(Form_xlogminer_contents fxc)
 	}
 	else
 		nulls[Anum_xlogminer_contents_op_undo - 1] = true;
-
+#ifdef PG_VERSION_12
+	xlogminer_contents = table_open(reloid, AccessShareLock);
+#else
 	xlogminer_contents = heap_open(reloid, AccessShareLock);
+#endif
 	if(!xlogminer_contents)
 		ereport(ERROR,(errmsg("It is failed to open temporary table xlogminer_contents.")));
 

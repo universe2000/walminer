@@ -14,5 +14,20 @@ else
 subdir = contrib/walminer
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
+
+ifeq ($(MAJORVERSION), 12)
+	PG_CPPFLAGS = -DPG_VERSION_12
+else ifeq ($(MAJORVERSION), 11)
+	PG_CPPFLAGS = -DPG_VERSION_11
+else ifeq ($(MAJORVERSION), 10)
+	PG_CPPFLAGS = -DPG_VERSION_10
+else ifeq ($(MAJORVERSION), 9.6)
+	PG_CPPFLAGS = -DPG_VERSION_9_6
+else ifeq ($(MAJORVERSION), 9.5)
+	PG_CPPFLAGS = -DPG_VERSION_9_5
+else
+	$(error unsupport PG version)
+endif
+
 include $(top_srcdir)/contrib/contrib-global.mk
 endif

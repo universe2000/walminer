@@ -931,12 +931,7 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 				*sendFile = -1;
 			}
 			xlogfilename = getNextXlogFile((char*)(&rrctl.lfctx),false);
-			if(tempresultout)
-			{
-				outTempleResult("Change Wal Segment To:");
-				outTempleResult(xlogfilename);
-			}
-			elog(NOTICE, "Change Wal Segment To:%s", xlogfilename);
+			
 			if(xlogfilename)
 			{
 				split_path_fname(xlogfilename, &temp_path, &temp_fname);
@@ -944,10 +939,17 @@ XLogMinerXLogRead(const char *directory, TimeLineID *timeline_id,
 			}
 			else
 				return PG_LOGMINER_WALFILE_ENDALL;
+			if(tempresultout)
+			{
+				outTempleResult("Change Wal Segment To:");
+				outTempleResult(xlogfilename);
+			}
+			elog(NOTICE, "Change Wal Segment To:%s", xlogfilename);
 			
 			if (*sendFile < 0)
 			{
-				ereport(NOTICE,(errmsg("could not find file \"%s\": %s",temp_fname, strerror(errno))));
+				int err = errno;
+				ereport(NOTICE,(errmsg("could not find file \"%s\": %s",temp_fname, strerror(err))));
 				*sendFile = -1;
 				*sendSegNo = 0;
 				*sendOff = 0;

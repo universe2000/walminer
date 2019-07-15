@@ -33,7 +33,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
+#ifdef PG_VERSION_12
+#include "access/genam.h"
+#endif
 char	*DataDictionaryCache = NULL;
 char	*XlogfileListCache = NULL;
 char	dictionary_path[MAXPGPATH] = {0};
@@ -585,14 +587,27 @@ getRelationOidByName(char* relname, Oid* reloid, bool gettemptable)
 {
 	bool				result = false;
 	Relation			pgclass = NULL;
+#ifdef PG_VERSION_12
+	SysScanDesc		scan = NULL;
+#else
 	HeapScanDesc		scan = NULL;
+#endif
 	HeapTuple			tuple = NULL;
 	Form_pg_class 		classForm = NULL;
-	
+#ifdef PG_VERSION_12	
+	pgclass = table_open(RelationRelationId, AccessShareLock);
+	scan = systable_beginscan(pgclass, 0, false,
+							   SnapshotSelf, 0, NULL);
+#else
 	pgclass = heap_open(RelationRelationId, AccessShareLock);
 	scan = heap_beginscan_catalog(pgclass, 0, NULL);
+#endif
 
+#ifdef PG_VERSION_12
+	while ((tuple = systable_getnext(scan)) != NULL)
+#else
 	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+#endif
 	{
 		classForm = (Form_pg_class) GETSTRUCT(tuple);
 		if(0 == strcmp(relname,classForm->relname.data))
@@ -601,13 +616,22 @@ getRelationOidByName(char* relname, Oid* reloid, bool gettemptable)
 				continue;
 			if(!gettemptable && PG_CATALOG_NAMESPACE != classForm->relnamespace)
 				continue;
+#ifdef PG_VERSION_12
+			*reloid = classForm->oid;
+#else
 			*reloid = HeapTupleHeaderGetOid(tuple->t_data);
+#endif
 			result = true;
 			break;
 		}
 	}
+#ifdef PG_VERSION_12
+	systable_endscan(scan);
+	table_close(pgclass, AccessShareLock);
+#else
 	heap_endscan(scan);
 	heap_close(pgclass, AccessShareLock);
+#endif
 	return result;
 }
 
@@ -1106,13 +1130,33 @@ outSigSysTableDictionary(Oid reloid, char* relname,int datasgsize, SysDataCache 
 	bool				result = false;
 	
 	Relation			pgrel = NULL;
+#ifdef PG_VERSION_12
+	SysScanDesc			scan = NULL;
+#else
 	HeapScanDesc		scan = NULL;
+#endif
 	HeapTuple			tuple = NULL;
 	/*
 	Form_pg_class		classForm = NULL;
 	char				*curdata = NULL;
 	Oid					oid_temp = 0;
 	*/
+#ifdef PG_VERSION_12
+	pgrel = table_open(reloid, AccessShareLock);
+	if(!pgrel)
+		ereport(ERROR,(errmsg("Open relation(oid:%d) failed",reloid)));
+	scan = systable_beginscan(pgrel, 0, false,
+							   SnapshotSelf, 0, NULL);
+
+	while ((tuple = systable_getnext(scan)) != NULL)
+	{
+		adddatatocache(sdc, tuple, datasgsize);
+	}
+
+	builddata(sdc, relname);
+	systable_endscan(scan);
+	table_close(pgrel, AccessShareLock);
+#else
 	pgrel = heap_open(reloid, AccessShareLock);
 	if(!pgrel)
 		ereport(ERROR,(errmsg("Open relation(oid:%d) failed",reloid)));
@@ -1126,6 +1170,7 @@ outSigSysTableDictionary(Oid reloid, char* relname,int datasgsize, SysDataCache 
 	builddata(sdc, relname);
 	heap_endscan(scan);
 	heap_close(pgrel, AccessShareLock);
+#endif
 	return result;
 
 }
@@ -1642,7 +1687,11 @@ logminer_getFormByOid(int search_tabid, Oid reloid)
 	char				*fpg = NULL;
 	char 				*serchPtr = NULL;
 	char				*result = NULL;
+#ifdef PG_VERSION_12
+	int					oidvalue = NULL;
+#else
 	int					*oidPtr = NULL;
+#endif
 	SysClassLevel 		*scl = NULL;
 
 	scl = getImportantSysClass();
@@ -1652,8 +1701,13 @@ logminer_getFormByOid(int search_tabid, Oid reloid)
 	while(NULL != (serchPtr = logminer_getnext(search_tabid,scl)))
 	{
 		fpg = serchPtr + sizeof(Oid);
+#ifdef PG_VERSION_12
+		oidvalue = *(int*)fpg;
+		if(reloid == oidvalue)
+#else
 		oidPtr = (int *)serchPtr;
 		if(reloid == *oidPtr)
+#endif
 		{
 			result = fpg;
 			break;
@@ -1935,7 +1989,11 @@ getRelationOidByRelfileid(Oid relNodeid)
 	while(NULL != (serchPtr = logminer_getnext(search_tabid ,scl)))
 	{
 		fpc = (Form_pg_class)(serchPtr + sizeof(Oid));
+#ifdef PG_VERSION_12
+		oidPtr = (int*)fpc;
+#else
 		oidPtr = (int *)serchPtr;
+#endif
 		if(relNodeid == fpc->relfilenode)
 		{
 			result = *oidPtr;
@@ -1964,7 +2022,11 @@ getByRelfileidByRelationOid(Oid reloid)
 	while(NULL != (serchPtr = logminer_getnext(search_tabid ,scl)))
 	{
 		fpc = (Form_pg_class)(serchPtr + sizeof(Oid));
+#ifdef PG_VERSION_12
+		oidPtr = (int *)fpc;
+#else
 		oidPtr = (int *)serchPtr;
+#endif
 		if(reloid == *oidPtr)
 		{
 			result = fpc->relfilenode;
@@ -2038,7 +2100,11 @@ GetDescrByreloid(Oid reloid)
 	{
 		relnatts = fpc->relnatts;
 	}
+#ifdef PG_VERSION_12
+	tupdesc = CreateTemplateTupleDesc(relnatts);
+#else
 	tupdesc = CreateTemplateTupleDesc(relnatts, false);
+#endif
 	while(NULL != (serchPtr = logminer_getnext(pg_attribute_tabid,scl)))
 	{
 		fpa = (Form_pg_attribute)(serchPtr + sizeof(Oid));

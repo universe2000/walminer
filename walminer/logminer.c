@@ -422,7 +422,11 @@ TupleDesc
 makeOutputXlogDesc(void)
 {
 	TupleDesc tupdesc = NULL;
+#ifdef PG_VERSION_12
+	tupdesc = CreateTemplateTupleDesc(1);
+#else
 	tupdesc = CreateTemplateTupleDesc(1, false);
+#endif
 	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "path", TEXTOID, -1, 0);
 	return tupdesc;
 }
